@@ -1,0 +1,1443 @@
+You are a senior SaaS architect, full-stack developer, SEO engineer, AI agent engineer, and automation specialist.
+
+I want you to build a production-ready AI-powered SEO automation dashboard.
+
+The goal is NOT to create only a Google Search Console reporting dashboard.
+
+The goal is to build an autonomous SEO operating system that connects to a website, Google Search Console, Google Analytics 4, and the website CMS, analyzes SEO performance, identifies opportunities, creates and optimizes content, publishes approved content, and continuously monitors results.
+
+I already have access to:
+
+1. Hermes Agent
+2. Claude Code
+3. Google Search Console
+4. Google Analytics 4
+5. Website/CMS
+6. AI models/API access
+
+Build the system so Hermes can act as the SEO automation/orchestration agent and Claude Code can handle development, debugging, implementation, and technical tasks.
+
+==================================================
+1. PRODUCT NAME
+==================================================
+
+Create the dashboard as:
+
+"AI SEO Command Center"
+
+Subtitle:
+
+"Autonomous SEO Intelligence & Growth Platform"
+
+The UI should feel like a professional SaaS product.
+
+Use the uploaded dashboard screenshot as visual inspiration.
+
+The dashboard should have:
+
+- Clean modern interface
+- White/off-white background
+- Dark text
+- Red/maroon primary accent
+- Green success indicators
+- Orange warning indicators
+- Responsive design
+- Desktop-first dashboard
+- Mobile responsive
+- Cards
+- Charts
+- Tables
+- SEO opportunity indicators
+- AI recommendations
+- Automation status
+- Activity logs
+
+Do NOT simply copy the screenshot.
+Use it only as UI inspiration.
+
+==================================================
+2. CORE OBJECTIVE
+==================================================
+
+The system should answer:
+
+"What should I do today to increase organic traffic?"
+
+Every day the system should automatically:
+
+1. Fetch Google Search Console data
+2. Fetch GA4 data
+3. Analyze keywords
+4. Analyze pages
+5. Detect ranking opportunities
+6. Detect declining keywords
+7. Detect declining pages
+8. Detect CTR opportunities
+9. Detect content gaps
+10. Detect cannibalization
+11. Detect pages ranking in positions 4-20
+12. Detect pages with high impressions but low CTR
+13. Detect pages with traffic decline
+14. Analyze competitors where data is available
+15. Recommend new content
+16. Generate blog topics
+17. Generate SEO briefs
+18. Generate articles
+19. Optimize existing articles
+20. Suggest internal links
+21. Generate schema
+22. Generate title/meta description improvements
+23. Generate FAQ sections
+24. Generate AEO/GEO content
+25. Publish only when configured/approved
+26. Monitor results after publishing
+27. Learn from successful content
+28. Repeat the process
+
+==================================================
+3. WEBSITE CONNECTION
+==================================================
+
+Create a website connection system.
+
+User should be able to connect:
+
+- WordPress
+- Shopify
+- Webflow
+- Custom website
+- Next.js
+- React
+- Laravel
+- Other CMS through API
+
+Connection fields:
+
+Website Name
+Website URL
+CMS
+Admin/API endpoint
+API credentials
+Sitemap URL
+Robots.txt URL
+
+Do NOT store API passwords/secrets in plain text.
+
+Use encrypted credentials.
+
+Create:
+
+/settings/websites
+
+Each website should become an independent SEO project.
+
+Example:
+
+Project:
+Agni Steels
+
+Domain:
+https://example.com
+
+CMS:
+WordPress
+
+Search Console Property:
+sc-domain:example.com
+
+GA4 Property:
+123456789
+
+==================================================
+4. GOOGLE SEARCH CONSOLE INTEGRATION
+==================================================
+
+Implement Google OAuth.
+
+Allow the user to connect their Google account.
+
+Retrieve:
+
+- Clicks
+- Impressions
+- CTR
+- Average position
+- Queries
+- Pages
+- Countries
+- Devices
+- Search appearance
+- Date
+
+Allow date filters:
+
+Today
+Yesterday
+Last 7 days
+Last 28 days
+Last 3 months
+Last 6 months
+Last 12 months
+Custom
+
+Store historical data locally so charts can show trends.
+
+Important:
+
+Do not repeatedly request unnecessary API data.
+
+Use scheduled synchronization.
+
+==================================================
+5. GOOGLE ANALYTICS 4
+==================================================
+
+Connect GA4 through OAuth.
+
+Retrieve:
+
+- Users
+- New users
+- Sessions
+- Engaged sessions
+- Organic users
+- Organic sessions
+- Landing pages
+- Conversions
+- Revenue where available
+- Engagement rate
+- Traffic source
+- Medium
+- Country
+- Device
+
+Connect GA4 data with Search Console data.
+
+Example:
+
+Keyword
+→ Landing Page
+→ Organic Sessions
+→ Conversion
+→ Revenue
+
+==================================================
+6. MAIN DASHBOARD
+==================================================
+
+Create a dashboard similar in concept to the provided screenshot.
+
+Top KPI cards:
+
+GOOGLE CLICKS
+IMPRESSIONS
+AVG POSITION
+CTR
+ORGANIC USERS
+ORGANIC SESSIONS
+CONVERSIONS
+CONTENT PUBLISHED
+
+Example:
+
+Google Clicks
+12,483
++18.4%
+
+Impressions
+684,920
++24.1%
+
+Average Position
+8.2
++2.1 positions
+
+CTR
+3.8%
++0.7%
+
+Organic Users
+18,921
+
+Conversions
+382
+
+Content Published
+28
+
+==================================================
+7. TRAFFIC GRAPH
+==================================================
+
+Create interactive charts:
+
+Organic Traffic Growth
+
+Lines:
+
+Clicks
+Impressions
+Organic Users
+Sessions
+
+Allow:
+
+7 days
+28 days
+90 days
+6 months
+1 year
+
+Hover should display:
+
+Date
+Clicks
+Impressions
+CTR
+Position
+Users
+Sessions
+
+==================================================
+8. SEO HEALTH SCORE
+==================================================
+
+Create an SEO Health Score.
+
+Example categories:
+
+Technical SEO
+Content
+Keywords
+Backlinks
+Internal Linking
+CTR
+Indexation
+Schema
+Local SEO
+AEO/GEO
+
+Do NOT create a meaningless score.
+
+Every score must have an explanation.
+
+Example:
+
+SEO Health
+78/100
+
+Issues:
+- 8 pages have declining traffic
+- 14 keywords are positions 11-20
+- 6 pages have low CTR
+- 4 orphan pages
+- 12 missing FAQ opportunities
+
+Clicking the score opens detailed issues.
+
+==================================================
+9. SEO OPPORTUNITY ENGINE
+==================================================
+
+This is one of the most important features.
+
+Automatically identify:
+
+A. QUICK WINS
+
+Keywords ranking:
+
+Position 4-10
+
+with:
+
+High impressions
+AND
+Low CTR
+
+Example:
+
+Keyword:
+steel price today
+
+Position:
+6.4
+
+Impressions:
+18,420
+
+CTR:
+1.2%
+
+Recommended action:
+
+Improve title
+Improve meta description
+Add FAQ
+Add structured content
+Strengthen internal links
+
+--------------------------------------------------
+
+B. PAGE 2 OPPORTUNITIES
+
+Find keywords ranking:
+
+11-20
+
+Prioritize based on:
+
+Search impressions
+Current position
+Historical trend
+Page quality
+Search intent
+Content relevance
+
+Example:
+
+Keyword:
+best tmt rods
+
+Position:
+14.2
+
+Impressions:
+8,230
+
+AI recommendation:
+
+Expand article
+Add comparison table
+Add FAQs
+Add supporting internal links
+Acquire relevant backlinks
+
+--------------------------------------------------
+
+C. DECLINING KEYWORDS
+
+Detect:
+
+Position decline
+Click decline
+Impression decline
+CTR decline
+
+Compare:
+
+Last 7 days
+Previous 7 days
+
+Last 28 days
+Previous 28 days
+
+Last 3 months
+Previous 3 months
+
+--------------------------------------------------
+
+D. CONTENT DECAY
+
+Detect pages where:
+
+Traffic has declined
+Rankings have declined
+Content is old
+Competitors are stronger
+Search intent changed
+
+Recommend refresh.
+
+--------------------------------------------------
+
+E. CTR OPPORTUNITIES
+
+Find:
+
+High impressions
+Low CTR
+
+Generate alternative:
+
+Title tags
+Meta descriptions
+
+Show:
+
+Current
+AI suggestion 1
+AI suggestion 2
+AI suggestion 3
+
+User can approve one.
+
+==================================================
+10. KEYWORD INTELLIGENCE
+==================================================
+
+Create:
+
+/keywords
+
+Columns:
+
+Keyword
+Clicks
+Impressions
+CTR
+Position
+URL
+Trend
+Opportunity
+Intent
+Action
+
+Keyword intent classification:
+
+Informational
+Commercial
+Transactional
+Navigational
+Local
+
+Add filters.
+
+==================================================
+11. CONTENT INTELLIGENCE
+==================================================
+
+Create:
+
+/content
+
+Show all website pages/posts.
+
+Columns:
+
+URL
+Title
+Word Count
+Organic Traffic
+Clicks
+Impressions
+CTR
+Position
+Last Updated
+Content Score
+Status
+Recommended Action
+
+Statuses:
+
+Healthy
+Optimize
+Refresh
+Expand
+Create Supporting Content
+Redirect
+Investigate
+Cannibalization
+
+==================================================
+12. AI CONTENT OPPORTUNITY ENGINE
+==================================================
+
+Analyze Search Console data and generate content opportunities.
+
+Example:
+
+Existing keyword:
+
+"TMT bar price"
+
+Related opportunities:
+
+"TMT bar price today"
+"TMT bar price per kg"
+"Fe 500 vs Fe 500D"
+"best TMT bars for construction"
+"TMT bar price calculator"
+
+Create topical clusters.
+
+Output:
+
+Pillar Page
+Supporting Articles
+FAQ Articles
+Commercial Pages
+
+==================================================
+13. AUTOMATIC BLOG GENERATION
+==================================================
+
+Create:
+
+/automation/blogs
+
+User can configure:
+
+Blogs per day:
+1 / 2 / 3 / 5
+
+Blog length:
+800 / 1200 / 1500 / 2000 words
+
+Tone:
+Professional
+Informational
+Commercial
+Local
+Technical
+
+Country:
+India
+
+Language:
+English
+
+Target audience:
+Custom
+
+Automatically generate:
+
+1. Topic
+2. Primary keyword
+3. Secondary keywords
+4. Search intent
+5. SEO title
+6. Meta description
+7. URL slug
+8. H1
+9. H2/H3 structure
+10. Article
+11. FAQ
+12. Schema
+13. Internal links
+14. External references where appropriate
+15. CTA
+16. Featured image prompt
+
+==================================================
+14. DO NOT CREATE LOW-QUALITY AI SPAM
+==================================================
+
+This is extremely important.
+
+Do NOT generate generic AI articles simply to increase publishing volume.
+
+Before generating an article:
+
+Analyze:
+
+Search intent
+Existing website content
+Keyword overlap
+Competitor content where available
+Existing rankings
+Entity coverage
+Questions users ask
+SERP patterns where available
+
+Every article must provide unique value.
+
+Prevent:
+
+Keyword stuffing
+Duplicate content
+Near-duplicate articles
+Keyword cannibalization
+Unnatural internal links
+Fake statistics
+Fake citations
+Fake expert claims
+AI-generated nonsense
+
+==================================================
+15. BLOG OPTIMIZATION AGENT
+==================================================
+
+For existing content, AI should analyze:
+
+Title
+Meta description
+H1
+Headings
+Introduction
+Keyword usage
+Search intent
+Content depth
+Entity coverage
+Internal links
+External links
+FAQ
+Schema
+Images
+Alt text
+Readability
+Conversion elements
+
+Generate an optimization report.
+
+Example:
+
+CONTENT SCORE
+72/100
+
+Problems:
+
+Title CTR: Medium
+Search intent match: High
+Content depth: Medium
+Internal linking: Low
+FAQ coverage: Low
+Entity coverage: Medium
+
+Recommended actions:
+
+1. Rewrite title
+2. Add 500 words
+3. Add 4 internal links
+4. Add FAQ section
+5. Add Article schema
+
+Allow:
+
+"Apply All Recommendations"
+
+but require approval for major content changes unless automation is explicitly enabled.
+
+==================================================
+16. INTERNAL LINKING ENGINE
+==================================================
+
+Analyze all pages.
+
+Identify relevant internal linking opportunities.
+
+Example:
+
+Source:
+TMT Bar Price Guide
+
+Target:
+Fe 500D TMT Bars
+
+Suggested anchor:
+"Fe 500D TMT bars"
+
+Show:
+
+Source URL
+Target URL
+Anchor
+Reason
+Confidence
+
+Allow:
+
+Approve
+Reject
+Apply Automatically
+
+==================================================
+17. SCHEMA GENERATOR
+==================================================
+
+Automatically detect appropriate schema:
+
+Article
+FAQPage
+Product
+Service
+LocalBusiness
+Organization
+BreadcrumbList
+WebSite
+JobPosting
+HowTo
+
+Generate valid JSON-LD.
+
+Show:
+
+Preview
+Validation status
+Copy
+Apply to website
+
+==================================================
+18. AEO + GEO MODULE
+==================================================
+
+Create an AI Search Visibility section.
+
+Optimize content for:
+
+Google AI Overviews
+ChatGPT
+Gemini
+Perplexity
+Other AI answer engines
+
+Detect whether content contains:
+
+Direct answers
+Definitions
+Structured facts
+FAQs
+Entity relationships
+Comparisons
+Lists
+Clear headings
+Trust signals
+
+Generate:
+
+Answer blocks
+FAQ sections
+Entity summaries
+Comparison tables
+Question-answer content
+
+==================================================
+19. DAILY SEO AGENT
+==================================================
+
+Create a daily autonomous SEO agent.
+
+Every morning:
+
+1. Fetch latest GSC data
+2. Fetch latest GA4 data
+3. Compare historical performance
+4. Identify major changes
+5. Identify keyword opportunities
+6. Identify declining pages
+7. Identify content opportunities
+8. Identify CTR opportunities
+9. Identify internal linking opportunities
+10. Generate daily SEO task list
+
+Dashboard:
+
+TODAY'S SEO ACTIONS
+
+Priority 1
+Fix declining page
+
+Priority 2
+Optimize 5 high-impression / low-CTR pages
+
+Priority 3
+Create article:
+"Fe 500 vs Fe 500D"
+
+Priority 4
+Add internal links
+
+Priority 5
+Refresh old article
+
+==================================================
+20. AUTOMATION WORKFLOW
+==================================================
+
+Create an automation engine.
+
+Example workflow:
+
+08:00
+↓
+Sync GSC
+↓
+Sync GA4
+↓
+Analyze rankings
+↓
+Detect opportunities
+↓
+AI SEO Agent
+↓
+Generate recommendations
+↓
+Generate content
+↓
+Human approval
+↓
+Publish
+↓
+Submit/update sitemap if appropriate
+↓
+Monitor
+↓
+Measure results
+↓
+Feed results back into AI
+
+==================================================
+21. HUMAN APPROVAL SYSTEM
+==================================================
+
+IMPORTANT:
+
+Do not allow dangerous autonomous website changes by default.
+
+Create automation levels:
+
+LEVEL 1
+Analysis only
+
+LEVEL 2
+AI recommendations
+
+LEVEL 3
+Content drafts
+
+LEVEL 4
+Auto-publish approved content
+
+LEVEL 5
+Fully automated SEO operations
+
+Default should be:
+
+LEVEL 2
+
+Require approval for:
+
+Deleting pages
+Redirects
+Changing URLs
+Changing canonical tags
+Large-scale content replacement
+Publishing content
+Changing robots.txt
+Changing schema sitewide
+
+==================================================
+22. SEO ACTIVITY LOG
+==================================================
+
+Create:
+
+/activity
+
+Show:
+
+Timestamp
+Agent
+Action
+Website
+Page
+Action
+Status
+Result
+
+Example:
+
+10:32 AM
+SEO Agent
+Updated meta title
+/blog/tmt-price
+Completed
+
+10:41 AM
+Content Agent
+Generated article
+/blog/fe-500-vs-fe-500d
+Awaiting approval
+
+==================================================
+23. AI AGENT SYSTEM
+==================================================
+
+Create multiple specialized agents.
+
+AGENT 1:
+SEO Analyst
+
+Responsibilities:
+GSC analysis
+GA4 analysis
+ranking analysis
+traffic analysis
+
+AGENT 2:
+Keyword Strategist
+
+Responsibilities:
+keyword clustering
+intent classification
+opportunity detection
+
+AGENT 3:
+Content Strategist
+
+Responsibilities:
+topic discovery
+content briefs
+content clusters
+
+AGENT 4:
+Content Writer
+
+Responsibilities:
+SEO articles
+FAQs
+AEO content
+
+AGENT 5:
+On-Page SEO Agent
+
+Responsibilities:
+titles
+meta
+headers
+internal links
+schema
+
+AGENT 6:
+Technical SEO Agent
+
+Responsibilities:
+indexation
+canonical
+sitemap
+robots
+404
+redirects
+Core Web Vitals where data is available
+
+AGENT 7:
+SEO QA Agent
+
+Responsibilities:
+quality checks before publishing
+
+AGENT 8:
+Performance Agent
+
+Responsibilities:
+measure published content performance
+
+AGENT 9:
+Orchestrator
+
+Responsible for coordinating all agents.
+
+==================================================
+24. HERMES INTEGRATION
+==================================================
+
+Treat Hermes as the main autonomous orchestration layer.
+
+Create structured tasks that Hermes can execute.
+
+Example:
+
+TASK:
+Analyze website performance.
+
+INPUT:
+website_id
+
+PROCESS:
+
+Fetch GSC
+Fetch GA4
+Analyze
+Prioritize
+Generate actions
+
+OUTPUT:
+
+{
+  "priority": "high",
+  "issues": [],
+  "opportunities": [],
+  "recommended_actions": [],
+  "content_opportunities": []
+}
+
+Hermes should maintain task state:
+
+queued
+running
+waiting_approval
+completed
+failed
+
+==================================================
+25. CLAUDE CODE INTEGRATION
+==================================================
+
+Claude Code should be able to work with the project repository.
+
+Create developer commands/workflows for:
+
+/seo-audit
+/content-audit
+/keyword-opportunities
+/generate-blog
+/optimize-page
+/internal-links
+/schema
+/technical-audit
+/gsc-sync
+/ga4-sync
+
+Claude Code should be able to inspect:
+
+Frontend
+Backend
+Database
+API integrations
+CMS integration
+SEO implementation
+
+==================================================
+26. DATABASE
+==================================================
+
+Use PostgreSQL.
+
+Suggested tables:
+
+users
+websites
+integrations
+gsc_properties
+ga4_properties
+gsc_queries
+gsc_pages
+gsc_daily_metrics
+ga4_metrics
+keywords
+keyword_clusters
+content
+content_versions
+content_opportunities
+seo_issues
+seo_recommendations
+internal_links
+schema_records
+automation_rules
+automation_runs
+agent_tasks
+agent_logs
+approvals
+
+Design proper indexes.
+
+==================================================
+27. API ARCHITECTURE
+==================================================
+
+Create clean API endpoints.
+
+Example:
+
+GET /api/websites
+
+POST /api/websites
+
+GET /api/gsc/performance
+
+GET /api/gsc/queries
+
+GET /api/gsc/pages
+
+GET /api/ga4/performance
+
+GET /api/seo/opportunities
+
+GET /api/seo/issues
+
+POST /api/content/generate
+
+POST /api/content/optimize
+
+POST /api/content/publish
+
+POST /api/internal-links/analyze
+
+POST /api/schema/generate
+
+POST /api/automation/run
+
+GET /api/automation/status
+
+==================================================
+28. DASHBOARD PAGES
+==================================================
+
+Create these pages:
+
+1. Dashboard
+2. Websites
+3. Search Console
+4. Analytics
+5. Keywords
+6. Pages
+7. Content
+8. Content Opportunities
+9. Blog Generator
+10. Content Optimizer
+11. Internal Links
+12. Schema
+13. AEO/GEO
+14. Technical SEO
+15. Backlinks
+16. Competitors
+17. Automations
+18. Agent Activity
+19. Approvals
+20. Reports
+21. Settings
+
+==================================================
+29. DASHBOARD SIDEBAR
+==================================================
+
+Use:
+
+Dashboard
+Websites
+Performance
+  - Search Console
+  - Analytics
+
+SEO Intelligence
+  - Keywords
+  - Opportunities
+  - Pages
+  - Technical SEO
+
+Content
+  - Content Library
+  - Blog Generator
+  - Optimizer
+  - Internal Links
+  - Schema
+
+AI Search
+  - AEO
+  - GEO
+  - AI Visibility
+
+Automation
+  - Daily SEO Agent
+  - Blog Automation
+  - Workflows
+  - Activity
+
+Reports
+
+Settings
+
+==================================================
+30. NOTIFICATIONS
+==================================================
+
+Create alerts for:
+
+Traffic drop
+Ranking drop
+Indexing issue
+CTR drop
+Major impression change
+New keyword opportunity
+Content decay
+Technical SEO issue
+Publishing failure
+
+Example:
+
+⚠ Traffic dropped 18%
+
+3 pages caused 71% of the decline.
+
+View affected pages →
+
+==================================================
+31. REPORTING
+==================================================
+
+Generate:
+
+Daily SEO Report
+Weekly SEO Report
+Monthly SEO Report
+
+Report should include:
+
+Traffic
+Clicks
+Impressions
+CTR
+Average position
+Top keywords
+Top pages
+Winning pages
+Declining pages
+New keywords
+Lost keywords
+Content published
+Content performance
+Conversions
+SEO actions completed
+Next actions
+
+Allow:
+
+PDF
+CSV
+Excel
+Email report
+
+==================================================
+32. MULTI-WEBSITE SUPPORT
+==================================================
+
+The system must support multiple websites.
+
+Example:
+
+Agni Steels
+Buddy Mobility Care
+Webdoux
+Pettikadai
+Jobanya
+Royal Pearl Hospitals
+
+Each website must have isolated:
+
+GSC data
+GA4 data
+keywords
+content
+automation
+agents
+settings
+
+Create a website switcher at the top.
+
+==================================================
+33. SECURITY
+==================================================
+
+Implement:
+
+OAuth
+Encrypted API credentials
+Role-based access
+Admin
+Manager
+Editor
+Viewer
+
+Audit logs.
+
+Never expose:
+
+Google access tokens
+CMS passwords
+API keys
+AI keys
+
+to the frontend.
+
+==================================================
+34. PERFORMANCE
+==================================================
+
+The dashboard should be fast.
+
+Use:
+
+Caching
+Pagination
+Background jobs
+Queue system
+Database indexing
+Incremental synchronization
+
+Do not fetch thousands of GSC records on every page load.
+
+==================================================
+35. SEO DECISION ENGINE
+==================================================
+
+Create a prioritization algorithm.
+
+Each opportunity should calculate:
+
+Impact
+Difficulty
+Confidence
+Urgency
+
+But do NOT present it as an arbitrary "SEO score".
+
+Example:
+
+Opportunity:
+
+Optimize page title
+
+Estimated impact:
+High
+
+Evidence:
+
+18,420 impressions
+1.2% CTR
+Position 6.4
+
+Reason:
+
+High search visibility but low click-through rate.
+
+==================================================
+36. CONTENT CALENDAR
+==================================================
+
+Create a calendar.
+
+Example:
+
+MONDAY
+Blog:
+TMT Bar Price Today
+
+TUESDAY
+Blog:
+Fe 500 vs Fe 500D
+
+WEDNESDAY
+Blog:
+Best TMT Bars for High Rise Buildings
+
+THURSDAY
+Refresh:
+TMT Price Guide
+
+FRIDAY
+Blog:
+TMT Bar Weight Calculator
+
+Allow AI to automatically build the calendar based on:
+
+Keyword gaps
+Search demand
+Existing content
+Seasonality
+Business goals
+
+==================================================
+37. AUTONOMOUS SEO LOOP
+==================================================
+
+The

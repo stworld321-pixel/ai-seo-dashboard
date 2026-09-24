@@ -1,0 +1,1157 @@
+{
+  "successful": true,
+  "parallel": true,
+  "results": [
+    {
+      "slug": "GOOGLE_SEARCH_CONSOLE_SEARCH_ANALYTICS_QUERY",
+      "successful": true,
+      "data": {
+        "responseAggregationType": "byProperty",
+        "rows": [
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 6,
+            "keys": [
+              "aloe vera hair cream"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "anti ageing soap"
+            ],
+            "position": 13
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 7,
+            "keys": [
+              "anti aging soap"
+            ],
+            "position": 14.857142857142858
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "anti-aging soap"
+            ],
+            "position": 12
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "best charcoal soap"
+            ],
+            "position": 47
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "best charcoal soap in india"
+            ],
+            "position": 45
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "botanical gels for natural hair"
+            ],
+            "position": 52
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 6,
+            "keys": [
+              "camel milk soap"
+            ],
+            "position": 40.333333333333336
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "camel soap"
+            ],
+            "position": 37
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 5,
+            "keys": [
+              "charcoal face soap"
+            ],
+            "position": 48
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 41,
+            "keys": [
+              "charcoal soap"
+            ],
+            "position": 51
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "charcoal soap for face"
+            ],
+            "position": 41
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "charcoal soap for skin whitening"
+            ],
+            "position": 36.666666666666664
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "charcoal soap india"
+            ],
+            "position": 46
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 21,
+            "keys": [
+              "charcoal soap price"
+            ],
+            "position": 28.428571428571427
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 73,
+            "keys": [
+              "coconut milk soap"
+            ],
+            "position": 8.767123287671232
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 4,
+            "keys": [
+              "coffee facewash"
+            ],
+            "position": 17.75
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 9,
+            "keys": [
+              "coffee soap"
+            ],
+            "position": 31.11111111111111
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "donkey milk soaps"
+            ],
+            "position": 59
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "fairness shop"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 32,
+            "keys": [
+              "fairness soap"
+            ],
+            "position": 17.28125
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "hair gel herbal"
+            ],
+            "position": 5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "hair gel tea tree"
+            ],
+            "position": 24
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "herbal hair gel"
+            ],
+            "position": 9.333333333333334
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 40,
+            "keys": [
+              "kumkumadi face serum"
+            ],
+            "position": 47.575
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 21,
+            "keys": [
+              "kumkumadi serum"
+            ],
+            "position": 42.857142857142854
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 20,
+            "keys": [
+              "kumkumadi serum for face"
+            ],
+            "position": 35.3
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "lit hair"
+            ],
+            "position": 53
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "lite acne face wash"
+            ],
+            "position": 7
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "lite n easy email address"
+            ],
+            "position": 84
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "litna"
+            ],
+            "position": 57
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "little extra hair growth serum"
+            ],
+            "position": 44
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "moringa gel"
+            ],
+            "position": 9.5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "moringa hair cream"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "mrp in india"
+            ],
+            "position": 16
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "natural gel"
+            ],
+            "position": 57
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "nature's aloe vera soap"
+            ],
+            "position": 42.5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "organic pomegranate seed soap india for anti-aging"
+            ],
+            "position": 51
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 37,
+            "keys": [
+              "red wine soap"
+            ],
+            "position": 44.189189189189186
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 5,
+            "keys": [
+              "red wine soap benefits"
+            ],
+            "position": 45.6
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "redwine soap"
+            ],
+            "position": 45
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "rose gel"
+            ],
+            "position": 50
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "rose gel benefits"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "rose gel for face"
+            ],
+            "position": 34
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 11,
+            "keys": [
+              "saffron soap"
+            ],
+            "position": 50.63636363636363
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "safron soap"
+            ],
+            "position": 50
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 16,
+            "keys": [
+              "sandalwood soap"
+            ],
+            "position": 36.125
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "soap charcoal"
+            ],
+            "position": 52.333333333333336
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "soap coffee"
+            ],
+            "position": 34.333333333333336
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "soap donkey milk"
+            ],
+            "position": 51
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "soap for fairness"
+            ],
+            "position": 19
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 4,
+            "keys": [
+              "tea tree gel"
+            ],
+            "position": 40.75
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "tea tree gel for hair"
+            ],
+            "position": 14
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "tea tree hair gel"
+            ],
+            "position": 10.5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "tea tree oil hair gel"
+            ],
+            "position": 8
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 6,
+            "keys": [
+              "wine soap"
+            ],
+            "position": 38.666666666666664
+          }
+        ]
+      },
+      "error": null,
+      "logId": "log_Z2_d58wtXQRG"
+    },
+    {
+      "slug": "GOOGLE_SEARCH_CONSOLE_SEARCH_ANALYTICS_QUERY",
+      "successful": true,
+      "data": {
+        "responseAggregationType": "byPage",
+        "rows": [
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 23,
+            "keys": [
+              "https://litenatures.in/"
+            ],
+            "position": 10.608695652173912
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "https://litenatures.in/2026/02/21/kumkumadi-face-serum-benefits-for-glowing-skin/"
+            ],
+            "position": 11
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "https://litenatures.in/about-us/"
+            ],
+            "position": 7.5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "https://litenatures.in/category/uncategorized/"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "https://litenatures.in/contact-v1/"
+            ],
+            "position": 45.5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "https://litenatures.in/product-category/hair-oil/"
+            ],
+            "position": 31
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "https://litenatures.in/product-category/organic-soaps/page/2/?add_to_compare=6701&column=2"
+            ],
+            "position": 7
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 7,
+            "keys": [
+              "https://litenatures.in/product/32-advanced-men-hair-oil/"
+            ],
+            "position": 5.428571428571429
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "https://litenatures.in/product/32-advanced-women-hair-oil/"
+            ],
+            "position": 2
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 12,
+            "keys": [
+              "https://litenatures.in/product/aloe-vera-hair-cream/"
+            ],
+            "position": 3.25
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 6,
+            "keys": [
+              "https://litenatures.in/product/aloe-vera-neem-soap/"
+            ],
+            "position": 14.833333333333334
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 6,
+            "keys": [
+              "https://litenatures.in/product/anti-acne-face-wash/"
+            ],
+            "position": 6.833333333333333
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 15,
+            "keys": [
+              "https://litenatures.in/product/anti-aging-soap/"
+            ],
+            "position": 14.333333333333334
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 8,
+            "keys": [
+              "https://litenatures.in/product/camelmilk-soap/"
+            ],
+            "position": 36
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 78,
+            "keys": [
+              "https://litenatures.in/product/charcoal-soap/"
+            ],
+            "position": 43.93589743589744
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 77,
+            "keys": [
+              "https://litenatures.in/product/coconutmilk-soap/"
+            ],
+            "position": 8.415584415584416
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 9,
+            "keys": [
+              "https://litenatures.in/product/coffee-face-wash/"
+            ],
+            "position": 11.333333333333334
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 14,
+            "keys": [
+              "https://litenatures.in/product/coffee-soap/"
+            ],
+            "position": 28.071428571428573
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "https://litenatures.in/product/donkeymilk-soap/"
+            ],
+            "position": 55
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 57,
+            "keys": [
+              "https://litenatures.in/product/fairness-soap/"
+            ],
+            "position": 11.43859649122807
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "https://litenatures.in/product/goat-milk-soap/"
+            ],
+            "position": 2
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 7,
+            "keys": [
+              "https://litenatures.in/product/hair-regrowth-serum/"
+            ],
+            "position": 34.142857142857146
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 21,
+            "keys": [
+              "https://litenatures.in/product/herbal-hair-gel/"
+            ],
+            "position": 11
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "https://litenatures.in/product/kumkumadi-day-night-cream/"
+            ],
+            "position": 5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 84,
+            "keys": [
+              "https://litenatures.in/product/kumkumadi-face-serum/"
+            ],
+            "position": 43.285714285714285
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 9,
+            "keys": [
+              "https://litenatures.in/product/moringa-hair-gel/"
+            ],
+            "position": 6.666666666666667
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "https://litenatures.in/product/orange-peel-soap/"
+            ],
+            "position": 2
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 52,
+            "keys": [
+              "https://litenatures.in/product/red-wine-soap/"
+            ],
+            "position": 41.34615384615385
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 6,
+            "keys": [
+              "https://litenatures.in/product/rose-day-night-cream/"
+            ],
+            "position": 5.333333333333333
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 18,
+            "keys": [
+              "https://litenatures.in/product/rose-gel-for-face/"
+            ],
+            "position": 10.055555555555555
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 16,
+            "keys": [
+              "https://litenatures.in/product/saffron-soap/"
+            ],
+            "position": 43.1875
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 18,
+            "keys": [
+              "https://litenatures.in/product/sandalwood-soap/"
+            ],
+            "position": 33.05555555555556
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "https://litenatures.in/product/serum-hair-cream/"
+            ],
+            "position": 6.333333333333333
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 20,
+            "keys": [
+              "https://litenatures.in/product/tea-tree-hair-gel/"
+            ],
+            "position": 17.05
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 9,
+            "keys": [
+              "https://litenatures.in/product/vetiver-face-wash/"
+            ],
+            "position": 8
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 4,
+            "keys": [
+              "https://litenatures.in/shop/"
+            ],
+            "position": 2.75
+          }
+        ]
+      },
+      "error": null,
+      "logId": "log_RwNcXjGVp2h0"
+    },
+    {
+      "slug": "GOOGLE_SEARCH_CONSOLE_SEARCH_ANALYTICS_QUERY",
+      "successful": true,
+      "data": {
+        "responseAggregationType": "byProperty",
+        "rows": [
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "are"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 5,
+            "keys": [
+              "aus"
+            ],
+            "position": 42.4
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "bgd"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "can"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "deu"
+            ],
+            "position": 8
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "egy"
+            ],
+            "position": 3.5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "esp"
+            ],
+            "position": 42
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "fra"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "gbr"
+            ],
+            "position": 33.333333333333336
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "gha"
+            ],
+            "position": 21
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "grc"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "grd"
+            ],
+            "position": 10
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 528,
+            "keys": [
+              "ind"
+            ],
+            "position": 25.668560606060606
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "irn"
+            ],
+            "position": 4
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "jpn"
+            ],
+            "position": 49
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 3,
+            "keys": [
+              "nga"
+            ],
+            "position": 16.333333333333336
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "npl"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 4,
+            "keys": [
+              "pak"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "phl"
+            ],
+            "position": 32
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "pri"
+            ],
+            "position": 5
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "rus"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "rwa"
+            ],
+            "position": 2
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "srb"
+            ],
+            "position": 20
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "tgo"
+            ],
+            "position": 1
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "tun"
+            ],
+            "position": 27
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "twn"
+            ],
+            "position": 2
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 1,
+            "keys": [
+              "tza"
+            ],
+            "position": 9
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 12,
+            "keys": [
+              "usa"
+            ],
+            "position": 39.25
+          }
+        ]
+      },
+      "error": null,
+      "logId": "log_k_kWDK3ZemfO"
+    },
+    {
+      "slug": "GOOGLE_SEARCH_CONSOLE_SEARCH_ANALYTICS_QUERY",
+      "successful": true,
+      "data": {
+        "responseAggregationType": "byProperty",
+        "rows": [
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 198,
+            "keys": [
+              "DESKTOP"
+            ],
+            "position": 34.47979797979798
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 384,
+            "keys": [
+              "MOBILE"
+            ],
+            "position": 20.231770833333332
+          },
+          {
+            "clicks": 0,
+            "ctr": 0,
+            "impressions": 2,
+            "keys": [
+              "TABLET"
+            ],
+            "position": 48
+          }
+        ]
+      },
+      "error": null,
+      "logId": "log_r5n3ftWdMJMe"
+    }
+  ]
+}
