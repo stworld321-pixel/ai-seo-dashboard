@@ -1,0 +1,625 @@
+// AI SEO Command Center — data model
+// See docs/03-database-schema.md for the rationale behind each group.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7: connection URLs live in prisma.config.ts, not here.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────── Tenancy ───────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  members  OrgMember[]
+  websites Website[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  image        String?
+  createdAt    DateTime @default(now())
+
+  memberships OrgMember[]
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model OrgMember {
+  id     String @id @default(cuid())
+  orgId  String
+  userId String
+  role   Role   @default(MEMBER)
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+}
+
+// ─────────────────────── Website = SEO project ───────────────────────
+
+enum CmsType {
+  WORDPRESS
+  SHOPIFY
+  WEBFLOW
+  NEXTJS
+  REACT
+  LARAVEL
+  CUSTOM
+  OTHER
+}
+
+model Website {
+  id              String   @id @default(cuid())
+  orgId           String
+  name            String
+  url             String
+  cms             CmsType  @default(CUSTOM)
+  sitemapUrl      String?
+  robotsUrl       String?
+  timezone        String   @default("Asia/Kolkata")
+  country         String   @default("IND")
+  language        String   @default("en")
+  automationLevel Int      @default(2) // 1..5, see docs/06
+  gscProperty     String?
+  ga4PropertyId   String?
+  createdAt       DateTime @default(now())
+
+  org               Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  integrations      Integration[]
+  gscDaily          GscDaily[]
+  gscQueryDaily     GscQueryDaily[]
+  gscPageDaily      GscPageDaily[]
+  gscDimensionDaily GscDimensionDaily[]
+  syncCursors       SyncCursor[]
+  keywords          Keyword[]
+  pages             PageRecord[]
+  content           Content[]
+  opportunities     Opportunity[]
+  issues            SeoIssue[]
+  healthSnapshots   HealthScoreSnapshot[]
+  linkSuggestions   InternalLinkSuggestion[]
+  tasks             AgentTask[]
+  logs              AgentLog[]
+  automationRules   AutomationRule[]
+  automationRuns    AutomationRun[]
+  approvals         Approval[]
+  experiments       ContentExperiment[]
+  learningSignals   LearningSignal[]
+  notifications     Notification[]
+
+  @@unique([orgId, url])
+}
+
+// ─────────────────────── Integrations & secrets ───────────────────────
+
+enum IntegrationKind {
+  GSC
+  GA4
+  CMS
+  LLM
+}
+
+enum IntegrationStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  REVOKED
+}
+
+/// Secrets are AES-256-GCM encrypted; plaintext never touches a column.
+model Integration {
+  id           String            @id @default(cuid())
+  websiteId    String
+  kind         IntegrationKind
+  provider     String
+  externalId   String?
+  config       Json              @default("{}")
+  secretCipher Bytes?
+  secretIv     Bytes?
+  secretTag    Bytes?
+  status       IntegrationStatus @default(PENDING)
+  lastSyncAt   DateTime?
+  lastError    String?
+  createdAt    DateTime          @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, kind, provider])
+}
+
+// ─────────────────────── Search Console time series ───────────────────────
+
+model GscDaily {
+  websiteId   String
+  date        DateTime @db.Date
+  clicks      Int
+  impressions Int
+  ctr         Float
+  position    Float
+  dataState   String   @default("final")
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, date])
+}
+
+model GscQueryDaily {
+  id          BigInt   @id @default(autoincrement())
+  websiteId   String
+  date        DateTime @db.Date
+  query       String
+  clicks      Int
+  impressions Int
+  ctr         Float
+  position    Float
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, date, query])
+  @@index([websiteId, query, date])
+  @@index([websiteId, date, impressions(sort: Desc)])
+}
+
+model GscPageDaily {
+  id          BigInt   @id @default(autoincrement())
+  websiteId   String
+  date        DateTime @db.Date
+  page        String
+  clicks      Int
+  impressions Int
+  ctr         Float
+  position    Float
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, date, page])
+  @@index([websiteId, page, date])
+}
+
+/// country / device / searchAppearance, one table via a `dimension` discriminator.
+model GscDimensionDaily {
+  id          BigInt   @id @default(autoincrement())
+  websiteId   String
+  date        DateTime @db.Date
+  dimension   String
+  value       String
+  clicks      Int
+  impressions Int
+  ctr         Float
+  position    Float
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, date, dimension, value])
+  @@index([websiteId, dimension, date])
+}
+
+/// Tracks incremental sync so we never re-request data we already hold.
+model SyncCursor {
+  websiteId        String
+  dataset          String
+  lastCompleteDate DateTime? @db.Date
+  lastRunAt        DateTime?
+  lastStatus       String?
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, dataset])
+}
+
+// ─────────────────────── Derived intelligence ───────────────────────
+
+enum Intent {
+  INFORMATIONAL
+  COMMERCIAL
+  TRANSACTIONAL
+  NAVIGATIONAL
+  LOCAL
+}
+
+enum Trend {
+  UP
+  FLAT
+  DOWN
+  NEW
+  LOST
+}
+
+model Keyword {
+  id               String   @id @default(cuid())
+  websiteId        String
+  query            String
+  intent           Intent?
+  intentConfidence Float?
+  clusterId        String?
+  bestPage         String?
+  clicks28         Int      @default(0)
+  impressions28    Int      @default(0)
+  ctr28            Float    @default(0)
+  position28       Float?
+  clicksPrev28     Int      @default(0)
+  positionPrev28   Float?
+  trend            Trend    @default(FLAT)
+  opportunityScore Float    @default(0)
+  updatedAt        DateTime @updatedAt
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, query])
+  @@index([websiteId, opportunityScore(sort: Desc)])
+}
+
+enum PageStatus {
+  HEALTHY
+  OPTIMIZE
+  REFRESH
+  EXPAND
+  SUPPORTING
+  REDIRECT
+  INVESTIGATE
+  CANNIBALIZATION
+}
+
+model PageRecord {
+  id                 String     @id @default(cuid())
+  websiteId          String
+  url                String
+  title              String?
+  metaDescription    String?
+  h1                 String?
+  wordCount          Int?
+  lastCrawledAt      DateTime?
+  lastModifiedAt     DateTime?
+  indexState         String?
+  canonical          String?
+  isOrphan           Boolean    @default(false)
+  contentScore       Int?
+  contentScoreDetail Json?
+  status             PageStatus @default(HEALTHY)
+
+  website Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  content Content[]
+
+  @@unique([websiteId, url])
+}
+
+// ─────────────────────── Content lifecycle ───────────────────────
+
+enum ContentType {
+  ARTICLE
+  FAQ
+  META_TITLE
+  META_DESCRIPTION
+  SCHEMA
+  INTERNAL_LINK
+  PRODUCT_COPY
+}
+
+enum ContentStatus {
+  DRAFT
+  QA_FAILED
+  AWAITING_APPROVAL
+  APPROVED
+  REJECTED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+model Content {
+  id                String        @id @default(cuid())
+  websiteId         String
+  pageId            String?
+  type              ContentType
+  title             String
+  slug              String?
+  primaryKeyword    String?
+  secondaryKeywords String[]      @default([])
+  intent            Intent?
+  brief             Json?
+  body              String?
+  faq               Json?
+  schemaJson        Json?
+  status            ContentStatus @default(DRAFT)
+  qaReport          Json?
+  authorAgent       String?
+  cmsExternalId     String?
+  publishedUrl      String?
+  createdAt         DateTime      @default(now())
+  publishedAt       DateTime?
+
+  website     Website             @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  page        PageRecord?         @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  versions    ContentVersion[]
+  experiments ContentExperiment[]
+
+  @@index([websiteId, status])
+}
+
+/// Every automated change is versioned, which is what makes rollback possible.
+model ContentVersion {
+  id          String   @id @default(cuid())
+  contentId   String
+  version     Int
+  body        String
+  diffSummary String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, version])
+}
+
+// ─────────────────────── Opportunities & issues ───────────────────────
+
+enum OpportunityType {
+  QUICK_WIN
+  PAGE_TWO
+  CTR_GAP
+  DECLINING_KEYWORD
+  DECLINING_PAGE
+  CONTENT_DECAY
+  CONTENT_GAP
+  CANNIBALIZATION
+  INTERNAL_LINK
+  SCHEMA_MISSING
+  AEO_GAP
+  TECHNICAL
+}
+
+enum OppStatus {
+  OPEN
+  IN_PROGRESS
+  AWAITING_APPROVAL
+  DONE
+  DISMISSED
+  EXPIRED
+}
+
+model Opportunity {
+  id String @id @default(cuid())
+
+  websiteId String
+  type      OpportunityType
+  targetUrl String?
+  keyword   String?
+  priority  Int
+  score     Float
+  /// Modelled, not measured. Null when the site lacks click history to fit a CTR curve.
+  estimatedClicks Float?
+  /// Human-readable explanation rendered in the UI.
+  why       String
+  /// Only measured numbers belong here.
+  evidence       Json
+  recommendation Json
+  status         OppStatus @default(OPEN)
+  detectedAt     DateTime  @default(now())
+  resolvedAt     DateTime?
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, status, score(sort: Desc)])
+  @@index([websiteId, type])
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+model SeoIssue {
+  id         String   @id @default(cuid())
+  websiteId  String
+  category   String
+  severity   Severity
+  title      String
+  detail     Json
+  url        String?
+  status     String   @default("open")
+  detectedAt DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, category, status])
+}
+
+model HealthScoreSnapshot {
+  id        String   @id @default(cuid())
+  websiteId String
+  date      DateTime @db.Date
+  total     Int
+  breakdown Json
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, date])
+}
+
+model InternalLinkSuggestion {
+  id         String    @id @default(cuid())
+  websiteId  String
+  sourceUrl  String
+  targetUrl  String
+  anchor     String
+  reason     String
+  confidence Float
+  status     String    @default("suggested")
+  appliedAt  DateTime?
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, sourceUrl, targetUrl, anchor])
+}
+
+// ─────────────────────── Agents, automation, approvals ───────────────────────
+
+enum TaskState {
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model AgentTask {
+  id         String    @id @default(cuid())
+  websiteId  String
+  agent      String
+  kind       String
+  input      Json
+  output     Json?
+  state      TaskState @default(QUEUED)
+  parentId   String?
+  runId      String?
+  error      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, state, createdAt])
+}
+
+model AgentLog {
+  id        BigInt   @id @default(autoincrement())
+  websiteId String
+  taskId    String?
+  agent     String
+  level     String
+  message   String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, createdAt(sort: Desc)])
+}
+
+model AutomationRule {
+  id        String    @id @default(cuid())
+  websiteId String
+  name      String
+  kind      String
+  enabled   Boolean   @default(false)
+  schedule  String
+  config    Json      @default("{}")
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+
+  website Website         @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  runs    AutomationRun[]
+}
+
+model AutomationRun {
+  id         String    @id @default(cuid())
+  ruleId     String
+  websiteId  String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     String
+  summary    Json?
+  taskIds    String[]  @default([])
+
+  rule    AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  website Website        @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+/// Destructive actions always create one of these, at every automation level.
+model Approval {
+  id          String    @id @default(cuid())
+  websiteId   String
+  entityType  String
+  entityId    String
+  action      String
+  riskLevel   Severity
+  payload     Json
+  diff        Json?
+  status      String    @default("pending")
+  requestedBy String
+  decidedById String?
+  decidedAt   DateTime?
+  note        String?
+  createdAt   DateTime  @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, status])
+}
+
+// ─────────────────────── Learning loop ───────────────────────
+
+/// One measured change: baseline captured at apply time, outcome measured later.
+model ContentExperiment {
+  id         String    @id @default(cuid())
+  websiteId  String
+  contentId  String?
+  url        String
+  changeType String
+  appliedAt  DateTime
+  baseline   Json
+  measured14 Json?
+  measured28 Json?
+  outcome    String?
+  attributes Json      @default("{}")
+
+  website Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  content Content? @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@index([websiteId, appliedAt])
+}
+
+/// Aggregated learning; `weight` is clamped 0.7..1.4 so one lucky post can't dominate.
+model LearningSignal {
+  id         String   @id @default(cuid())
+  websiteId  String
+  signal     String
+  metric     String
+  delta      Float
+  sampleSize Int
+  confidence Float
+  weight     Float    @default(1.0)
+  updatedAt  DateTime @updatedAt
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, signal, metric])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  websiteId String
+  type      String
+  severity  Severity
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, readAt])
+}
