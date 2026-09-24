@@ -86,6 +86,7 @@ model Website {
   gscDaily          GscDaily[]
   gscQueryDaily     GscQueryDaily[]
   gscPageDaily      GscPageDaily[]
+  gscQueryPageDaily GscQueryPageDaily[]
   gscDimensionDaily GscDimensionDaily[]
   syncCursors       SyncCursor[]
   keywords          Keyword[]
@@ -190,6 +191,26 @@ model GscPageDaily {
   website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@unique([websiteId, date, page])
+  @@index([websiteId, page, date])
+}
+
+/// Query + page grain: which PAGE serves which QUERY. Without this, an
+/// opportunity knows the keyword but not the URL to fix.
+model GscQueryPageDaily {
+  id          BigInt   @id @default(autoincrement())
+  websiteId   String
+  date        DateTime @db.Date
+  query       String
+  page        String
+  clicks      Int
+  impressions Int
+  ctr         Float
+  position    Float
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, date, query, page])
+  @@index([websiteId, query, date])
   @@index([websiteId, page, date])
 }
 

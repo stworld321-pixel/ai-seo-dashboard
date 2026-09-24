@@ -230,11 +230,57 @@ export async function syncGscDimension(
   return { dataset, from: ymd(from), to: ymd(to), rowsFetched: rows.length, rowsWritten: written };
 }
 
+/**
+ * Query + page grain. This is the dataset that makes opportunities actionable:
+ * query-only data tells you "coconut milk soap ranks 8.8" but not WHICH page
+ * ranks, so a "rewrite the title" recommendation has no target. Larger than the
+ * other pulls, so it is synced over a shorter window by default.
+ */
+export async function syncGscQueryPages(opts: SyncOptions): Promise<SyncResult> {
+  const dataset = "gsc:query_page";
+  const { from, to } = await resolveWindow(opts.websiteId, dataset, opts);
+
+  const rows = await opts.provider.query({
+    siteUrl: opts.siteUrl,
+    startDate: ymd(from),
+    endDate: ymd(to),
+    dimensions: ["date", "query", "page"],
+  });
+
+  let written = 0;
+  for (const r of rows) {
+    const date = new Date(`${r.keys[0]}T00:00:00Z`);
+    const query = r.keys[1] ?? "";
+    const page = r.keys[2] ?? "";
+    await prisma.gscQueryPageDaily.upsert({
+      where: {
+        websiteId_date_query_page: { websiteId: opts.websiteId, date, query, page },
+      },
+      create: {
+        websiteId: opts.websiteId,
+        date,
+        query,
+        page,
+        clicks: r.clicks,
+        impressions: r.impressions,
+        ctr: r.ctr,
+        position: r.position,
+      },
+      update: { clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position },
+    });
+    written++;
+  }
+
+  await saveCursor(opts.websiteId, dataset, to, "ok");
+  return { dataset, from: ymd(from), to: ymd(to), rowsFetched: rows.length, rowsWritten: written };
+}
+
 export async function syncAll(opts: SyncOptions): Promise<SyncResult[]> {
   return [
     await syncGscDaily(opts),
     await syncGscQueries(opts),
     await syncGscPages(opts),
+    await syncGscQueryPages(opts),
     await syncGscDimension({ ...opts, dimension: "country" }),
     await syncGscDimension({ ...opts, dimension: "device" }),
   ];

@@ -113,6 +113,29 @@ async function main() {
     };
   });
 
+  // Attribute each query to the page that actually serves it, so a
+  // "rewrite the title" recommendation has a URL to act on. Uses the
+  // query+page grain; the winner is the page with the most impressions.
+  const qpRows = await prisma.gscQueryPageDaily.findMany({
+    where: { websiteId: website.id },
+    select: { query: true, page: true, impressions: true },
+  });
+  const pageByQuery = new Map<string, Map<string, number>>();
+  for (const r of qpRows) {
+    const inner = pageByQuery.get(r.query) ?? new Map<string, number>();
+    inner.set(r.page, (inner.get(r.page) ?? 0) + r.impressions);
+    pageByQuery.set(r.query, inner);
+  }
+  const bestPage = new Map<string, string>();
+  for (const [query, inner] of pageByQuery) {
+    const top = [...inner.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (top) bestPage.set(query, top[0]);
+  }
+  for (const q of queries) {
+    q.page = bestPage.get(q.query);
+  }
+  console.log(`   ${bestPage.size} queries attributed to a serving page`);
+
   const pGroups = await prisma.gscPageDaily.groupBy({
     by: ["page"],
     where: { websiteId: website.id },
