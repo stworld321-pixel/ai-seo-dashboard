@@ -1,26 +1,61 @@
 @import "tailwindcss";
 
+/*
+ * AI SEO Command Center design tokens (docs/08-dashboard-wireframe.md).
+ * Off-white canvas, dark text, red/maroon primary, green success,
+ * orange warning. Light-only: this is a data dashboard read in daylight,
+ * and a half-built dark theme is worse than none.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fafaf9;
+  --surface: #ffffff;
+  --surface-muted: #f5f5f4;
+  --border: #e7e5e4;
+  --foreground: #1c1917;
+  --muted: #78716c;
+  --primary: #8b1e2d;
+  --primary-hover: #731825;
+  --primary-fg: #ffffff;
+  --success: #15803d;
+  --success-bg: #f0fdf4;
+  --warning: #c2410c;
+  --warning-bg: #fff7ed;
+  --danger: #b91c1c;
+  --danger-bg: #fef2f2;
+  --info: #1d4ed8;
+  --radius: 10px;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-info: var(--info);
+  --radius-card: var(--radius);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers in tables and metrics read better tabular and monospaced. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
