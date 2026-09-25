@@ -33,6 +33,7 @@ type WpItem = {
   modified: string;
   title?: { rendered?: string };
   content?: { rendered?: string };
+  excerpt?: { rendered?: string };
   meta?: Record<string, unknown>;
 };
 
@@ -263,6 +264,7 @@ export class WordPressProvider implements CmsProvider {
       metaDescription: str(meta[SEO_FIELDS.description]),
       focusKeyword: str(meta[SEO_FIELDS.focusKeyword]),
       content: w.content?.rendered,
+      excerpt: w.excerpt?.rendered,
       modifiedAt: w.modified,
     };
   }
@@ -674,185 +676,4 @@ export class WordPressProvider implements CmsProvider {
     }
     return null;
   }
-
-  /**
-   * Pulls live Google Site Kit (GA4), WooCommerce Orders/Products, and Rank Math
-   * Internal/External Link Graph telemetry from the connected WordPress site.
-   */
-  async fetchLiveSiteTelemetry(): Promise<LiveSiteTelemetry> {
-    let ga4: LiveSiteTelemetry["ga4"] = null;
-    let woocommerce: LiveSiteTelemetry["woocommerce"] = null;
-    let rankMathLinks: LiveSiteTelemetry["rankMathLinks"] = null;
-
-    if (!this.authed) {
-      return { ga4, woocommerce, rankMathLinks };
-    }
-
-    const [ga4Res, ordersRes, productsRes, postsStatsRes, linksStatsRes, postsRes, linksRes] =
-      await Promise.allSettled([
-        this.request<{
-          accountID?: string;
-          propertyID?: string;
-          measurementID?: string;
-          webDataStreamID?: string;
-          googleTagID?: string;
-        }>("/google-site-kit/v1/modules/analytics-4/data/settings"),
-        this.request<
-          {
-            id: number;
-            status: string;
-            date_created: string;
-            total: string;
-            currency: string;
-            billing?: { first_name?: string; last_name?: string; city?: string; state?: string };
-            line_items?: { name: string; quantity: number }[];
-          }[]
-        >("/wc/v3/orders?per_page=100"),
-        this.request<WcProduct[]>("/wc/v3/products?per_page=100"),
-        this.request<{
-          total_posts?: number;
-          orphan_posts?: number;
-          posts_with_internal?: number;
-          posts_with_external?: number;
-        }>("/rankmath/v1/links/posts-stats"),
-        this.request<{
-          total?: number;
-          internal?: number;
-          external?: number;
-        }>("/rankmath/v1/links/links-stats"),
-        this.request<{
-          posts?: {
-            post_id: string;
-            post_title: string;
-            post_type: string;
-            post_url: string;
-            internal_link_count: number;
-            external_link_count: number;
-            incoming_link_count: number;
-            is_orphan: boolean;
-            seo_score: number;
-          }[];
-        }>("/rankmath/v1/links/posts"),
-        this.request<{
-          links?: {
-            id: string;
-            type: string;
-            source_title: string;
-            source_url: string;
-            target_title: string | null;
-            target_url: string;
-          }[];
-        }>("/rankmath/v1/links/links"),
-      ]);
-
-    if (ga4Res.status === "fulfilled" && ga4Res.value?.propertyID) {
-      ga4 = {
-        connected: true,
-        accountId: ga4Res.value.accountID ?? null,
-        propertyId: ga4Res.value.propertyID ?? null,
-        measurementId: ga4Res.value.measurementID ?? null,
-        webDataStreamId: ga4Res.value.webDataStreamID ?? null,
-        googleTagId: ga4Res.value.googleTagID ?? null,
-      };
-    }
-
-    if (ordersRes.status === "fulfilled" && Array.isArray(ordersRes.value)) {
-      const orders = ordersRes.value;
-      const products =
-        productsRes.status === "fulfilled" && Array.isArray(productsRes.value)
-          ? productsRes.value
-          : [];
-      const activeStatuses = new Set(["completed", "processing", "on-hold"]);
-      let activeOrders = 0;
-      let activeRevenue = 0;
-      let grossOrderValue = 0;
-      let unitsSold = 0;
-
-      for (const o of orders) {
-        const val = Number.parseFloat(o.total || "0") || 0;
-        grossOrderValue += val;
-        if (activeStatuses.has(o.status)) {
-          activeOrders += 1;
-          activeRevenue += val;
-          for (const li of o.line_items ?? []) {
-            unitsSold += li.quantity || 0;
-          }
-        }
-      }
-
-      const scores: number[] = [];
-      for (const p of products) {
-        const scoreEntry = (p.meta_data ?? []).find((m) => m.key === "rank_math_seo_score");
-        const n = Number.parseInt(String(scoreEntry?.value ?? ""), 10);
-        if (Number.isFinite(n) && n > 0) scores.push(n);
-      }
-
-      woocommerce = {
-        totalOrders: orders.length,
-        activeOrders,
-        activeRevenue,
-        grossOrderValue,
-        unitsSold,
-        currency: orders[0]?.currency ?? "INR",
-        recentOrders: orders.slice(0, 10).map((o) => ({
-          id: o.id,
-          status: o.status,
-          dateCreated: o.date_created,
-          total: Number.parseFloat(o.total || "0") || 0,
-          currency: o.currency || "INR",
-          customerName:
-            [o.billing?.first_name, o.billing?.last_name].filter(Boolean).join(" ") || "Guest",
-          city: [o.billing?.city, o.billing?.state].filter(Boolean).join(", ") || "India",
-          items: (o.line_items ?? []).map((i) => `${decodeHtmlEntities(i.name)} ×${i.quantity}`),
-        })),
-        totalProducts: products.length,
-        publishedProducts: products.filter((p) => p.status === "publish").length,
-        unpublishedProducts: products.filter((p) => p.status !== "publish").length,
-        avgRankMathScore:
-          scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
-      };
-    }
-
-    if (postsStatsRes.status === "fulfilled" && linksStatsRes.status === "fulfilled") {
-      const ps = postsStatsRes.value;
-      const ls = linksStatsRes.value;
-      const rawPosts = postsRes.status === "fulfilled" ? (postsRes.value.posts ?? []) : [];
-      const rawLinks = linksRes.status === "fulfilled" ? (linksRes.value.links ?? []) : [];
-      rankMathLinks = {
-        totalPosts: ps.total_posts ?? rawPosts.length,
-        orphanPosts: ps.orphan_posts ?? rawPosts.filter((p) => p.is_orphan).length,
-        postsWithInternal: ps.posts_with_internal ?? 0,
-        postsWithExternal: ps.posts_with_external ?? 0,
-        totalLinks: ls.total ?? rawLinks.length,
-        internalLinks: ls.internal ?? 0,
-        externalLinks: ls.external ?? 0,
-        posts: rawPosts.map((p) => ({
-          postId: p.post_id,
-          title: decodeHtmlEntities(p.post_title),
-          postType: p.post_type,
-          url: p.post_url.startsWith("http") ? p.post_url : `${this.base}${p.post_url}`,
-          internalLinks: Number(p.internal_link_count ?? 0),
-          externalLinks: Number(p.external_link_count ?? 0),
-          incomingLinks: Number(p.incoming_link_count ?? 0),
-          isOrphan: Boolean(p.is_orphan),
-          seoScore: Number(p.seo_score ?? 0),
-        })),
-        links: rawLinks.slice(0, 60).map((l) => ({
-          id: l.id,
-          type: l.type,
-          sourceTitle: decodeHtmlEntities(l.source_title || ""),
-          sourceUrl: l.source_url.startsWith("http") ? l.source_url : `${this.base}${l.source_url}`,
-          targetTitle: l.target_title ? decodeHtmlEntities(l.target_title) : null,
-          targetUrl: l.target_url
-            ? l.target_url.startsWith("http")
-              ? l.target_url
-              : `${this.base}${l.target_url}`
-            : "",
-        })),
-      };
-    }
-
-    return { ga4, woocommerce, rankMathLinks };
-  }
 }
-

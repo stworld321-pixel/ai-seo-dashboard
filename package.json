@@ -17,7 +17,9 @@
     "sync:lite": "tsx scripts/sync-litenatures.ts",
     "demo:engine": "tsx scripts/demo-engine.ts",
     "connect:wp": "tsx scripts/connect-wordpress.ts",
-    "verify:wp": "tsx scripts/verify-wordpress.ts"
+    "verify:wp": "tsx scripts/verify-wordpress.ts",
+    "optimize:meta": "tsx scripts/optimize-meta.ts",
+    "audit": "tsx scripts/audit-site.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
