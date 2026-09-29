@@ -22,7 +22,34 @@ export type Encrypted = {
   cipher: Uint8Array<ArrayBuffer>;
   iv: Uint8Array<ArrayBuffer>;
   tag: Uint8Array<ArrayBuffer>;
+  packed?: Uint8Array<ArrayBuffer>;
 };
+
+export function toBuffer(val: unknown): Buffer {
+  if (!val) return Buffer.alloc(0);
+  if (Buffer.isBuffer(val)) return val;
+  if (val instanceof Uint8Array) {
+    return Buffer.from(val.buffer, val.byteOffset, val.byteLength);
+  }
+  if (typeof val === "object" && val !== null) {
+    const obj = val as Record<string, number>;
+    const keys = Object.keys(obj).filter((k) => !isNaN(Number(k)));
+    if (keys.length > 0) {
+      const arr = new Uint8Array(keys.length);
+      for (let i = 0; i < keys.length; i++) {
+        arr[i] = obj[i];
+      }
+      return Buffer.from(arr.buffer);
+    }
+  }
+  if (typeof val === "string") {
+    if (/^[0-9a-fA-F]+$/.test(val) && val.length % 2 === 0) {
+      return Buffer.from(val, "hex");
+    }
+    return Buffer.from(val, "utf8");
+  }
+  return Buffer.from(val as ArrayBufferLike);
+}
 
 function toBytes(b: Buffer): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(new ArrayBuffer(b.length));
@@ -51,14 +78,67 @@ export function encrypt(plaintext: string): Encrypted {
   const iv = crypto.randomBytes(IV_BYTES);
   const c = crypto.createCipheriv(ALGORITHM, getKey(), iv);
   const cipher = Buffer.concat([c.update(plaintext, "utf8"), c.final()]);
-  return { cipher: toBytes(cipher), iv: toBytes(iv), tag: toBytes(c.getAuthTag()) };
+  const tag = c.getAuthTag();
+  const packed = Buffer.concat([iv, tag, cipher]);
+
+  return {
+    cipher: toBytes(cipher),
+    iv: toBytes(iv),
+    tag: toBytes(tag),
+    packed: toBytes(packed),
+  };
 }
 
-export function decrypt(e: Encrypted): string {
-  const d = crypto.createDecipheriv(ALGORITHM, getKey(), e.iv);
-  d.setAuthTag(e.tag);
-  return Buffer.concat([d.update(e.cipher), d.final()]).toString("utf8");
+export function decrypt(
+  e:
+    | Encrypted
+    | {
+        cipher?: unknown;
+        iv?: unknown;
+        tag?: unknown;
+        encryptedAccessToken?: unknown;
+        encryptedRefreshToken?: unknown;
+        tokenIv?: unknown;
+        tokenTag?: unknown;
+      }
+    | unknown,
+): string {
+  const key = getKey();
+
+  // If passed directly as a packed buffer/Uint8Array or object with cipher only
+  const rawObj = (e && typeof e === "object" ? e : {}) as Record<string, unknown>;
+  const cipherBuf = toBuffer(rawObj.cipher ?? rawObj.encryptedAccessToken ?? rawObj.encryptedRefreshToken ?? e);
+  const ivBuf = toBuffer(rawObj.iv ?? rawObj.tokenIv);
+  const tagBuf = toBuffer(rawObj.tag ?? rawObj.tokenTag);
+
+  // Strategy 1: Standard separate IV + Tag + Cipher
+  if (ivBuf.length === IV_BYTES && tagBuf.length === 16 && cipherBuf.length > 0) {
+    try {
+      const d = crypto.createDecipheriv(ALGORITHM, key, ivBuf);
+      d.setAuthTag(tagBuf);
+      return Buffer.concat([d.update(cipherBuf), d.final()]).toString("utf8");
+    } catch {
+      // Fall through to packed check if failed
+    }
+  }
+
+  // Strategy 2: Packed payload [12 bytes IV][16 bytes Tag][Ciphertext]
+  if (cipherBuf.length >= IV_BYTES + 16) {
+    try {
+      const packedIv = cipherBuf.subarray(0, IV_BYTES);
+      const packedTag = cipherBuf.subarray(IV_BYTES, IV_BYTES + 16);
+      const packedCipher = cipherBuf.subarray(IV_BYTES + 16);
+      const d = crypto.createDecipheriv(ALGORITHM, key, packedIv);
+      d.setAuthTag(packedTag);
+      return Buffer.concat([d.update(packedCipher), d.final()]).toString("utf8");
+    } catch {
+      // Fall through
+    }
+  }
+
+  throw new Error("Failed to decrypt data: invalid ciphertext, IV, or auth tag.");
 }
+
 /** Convenience wrappers for storing a JSON secret blob. */
 export function encryptJson(value: unknown): Encrypted {
   return encrypt(JSON.stringify(value));
@@ -67,3 +147,4 @@ export function encryptJson(value: unknown): Encrypted {
 export function decryptJson<T>(e: Encrypted): T {
   return JSON.parse(decrypt(e)) as T;
 }
+

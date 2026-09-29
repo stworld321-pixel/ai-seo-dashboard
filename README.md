@@ -15,20 +15,20 @@ Google Search Console data.
 |---|---|
 | Architecture docs (12 deliverables) | done — `docs/` |
 | Next.js 16 + TS + Tailwind 4 scaffold | done |
-| Opportunity engine (6 detectors, zero LLM) | done, 24 tests green |
-| Site-fitted CTR curve | done |
-| Prisma schema / DB | designed, not migrated (needs Neon URL) |
-| Auth, website CRUD, sync jobs | not started |
-| Dashboard UI | not started |
-| Agents, automation, approvals | not started |
+| Opportunity engine (6 detectors, zero LLM) | done, unit tests green |
+| Site-fitted CTR curve, Health Score, Internal Links & Content QA | done |
+| Prisma schema / migrations / resilient local store & seed | done (`prisma/seed.ts`) |
+| Dashboard UI (all 15 routes) & API endpoints | done |
+| Approvals queue, Daily SEO Agent & WordPress Rank Math adapter | done |
 
 ## Quick start
 
 ```bash
 npm install
-npx vitest run                   # 24 tests against real litenatures.in GSC data
-npx tsx scripts/demo-engine.ts   # see the engine's output on that data
-npm run dev
+npx prisma generate
+npx tsx prisma/seed.ts           # seed real litenatures.in GSC data
+npx vitest run                   # run all unit tests
+npm run dev                      # open http://localhost:3000
 ```
 
 ## Documentation

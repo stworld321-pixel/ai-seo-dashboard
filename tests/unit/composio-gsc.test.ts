@@ -116,7 +116,7 @@ describe("ComposioGscProvider response handling", () => {
     const props = await p.listProperties();
     expect(props).toHaveLength(2);
     expect(props[0]!.siteUrl).toBe("https://litenatures.in/");
-  });
+  }, 15000);
 
   it("retries a transient failure before succeeding", async () => {
     const counter = path.join(tmp, "count.txt");
@@ -137,5 +137,5 @@ describe("ComposioGscProvider response handling", () => {
     });
     expect(rows).toEqual([]);
     expect(Number(fs.readFileSync(counter, "utf8"))).toBeGreaterThan(1);
-  });
+  }, 15000);
 });

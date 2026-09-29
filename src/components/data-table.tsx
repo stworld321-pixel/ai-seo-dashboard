@@ -3,7 +3,7 @@ import { cn } from "@/lib/format";
 export type Column<T> = {
   key: string;
   header: string;
-  align?: "left" | "right";
+  align?: "left" | "right" | "center";
   width?: string;
   render: (row: T) => React.ReactNode;
 };
@@ -36,7 +36,11 @@ export function DataTable<T>({
                 style={{ width: c.width }}
                 className={cn(
                   "px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-[var(--color-muted)]",
-                  c.align === "right" ? "text-right" : "text-left",
+                  c.align === "right"
+                    ? "text-right"
+                    : c.align === "center"
+                      ? "text-center"
+                      : "text-left",
                 )}
               >
                 {c.header}
@@ -53,6 +57,7 @@ export function DataTable<T>({
                   className={cn(
                     "px-5 py-2.5",
                     c.align === "right" && "text-right tabular",
+                    c.align === "center" && "text-center",
                   )}
                 >
                   {c.render(row)}

@@ -59,15 +59,39 @@ async function resolveWindow(
 
   if (opts.from) return { from: new Date(`${opts.from}T00:00:00Z`), to };
 
-  const cursor = await prisma.syncCursor.findUnique({
-    where: { websiteId_dataset: { websiteId, dataset } },
-  });
+  const [cursor, latestDaily] = await Promise.all([
+    prisma.syncCursor.findUnique({
+      where: { websiteId_dataset: { websiteId, dataset } },
+    }),
+    prisma.gscDaily.findFirst({
+      where: { websiteId },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    }),
+  ]);
 
-  if (!cursor?.lastCompleteDate) {
-    return { from: addDays(to, -(opts.backfillDays ?? 90)), to };
+  if (!cursor?.lastCompleteDate || !latestDaily?.date) {
+    const lookback = Math.max(opts.backfillDays ?? 90, 365);
+    return { from: addDays(to, -lookback), to };
   }
-  // Re-pull the trailing window so late-finalised days are corrected.
-  return { from: addDays(cursor.lastCompleteDate, -TRAILING_RECHECK_DAYS), to };
+
+  const effectiveCursorDate =
+    cursor.lastCompleteDate > latestDaily.date ? latestDaily.date : cursor.lastCompleteDate;
+  const recheckDays = Math.max(TRAILING_RECHECK_DAYS, opts.backfillDays ?? TRAILING_RECHECK_DAYS);
+
+  // Re-pull the trailing window from the last actual data date so late-finalised days and clock skew are handled.
+  return { from: addDays(effectiveCursorDate, -recheckDays), to };
+}
+
+function latestRowDateOrFallback(rows: Array<{ keys: string[] }>, fallback: Date): Date {
+  let maxIso = "";
+  for (const r of rows) {
+    const k = r.keys[0] ?? "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(k) && k > maxIso) {
+      maxIso = k;
+    }
+  }
+  return maxIso ? new Date(`${maxIso}T00:00:00Z`) : fallback;
 }
 
 async function saveCursor(websiteId: string, dataset: string, to: Date, status: string) {
@@ -108,8 +132,9 @@ export async function syncGscDaily(opts: SyncOptions): Promise<SyncResult> {
     written++;
   }
 
-  await saveCursor(opts.websiteId, dataset, to, "ok");
-  return { dataset, from: ymd(from), to: ymd(to), rowsFetched: rows.length, rowsWritten: written };
+  const cursorDate = latestRowDateOrFallback(rows, from);
+  await saveCursor(opts.websiteId, dataset, cursorDate, "ok");
+  return { dataset, from: ymd(from), to: ymd(cursorDate), rowsFetched: rows.length, rowsWritten: written };
 }
 
 /** Query grain, per date. */
@@ -144,8 +169,9 @@ export async function syncGscQueries(opts: SyncOptions): Promise<SyncResult> {
     written++;
   }
 
-  await saveCursor(opts.websiteId, dataset, to, "ok");
-  return { dataset, from: ymd(from), to: ymd(to), rowsFetched: rows.length, rowsWritten: written };
+  const cursorDate = latestRowDateOrFallback(rows, from);
+  await saveCursor(opts.websiteId, dataset, cursorDate, "ok");
+  return { dataset, from: ymd(from), to: ymd(cursorDate), rowsFetched: rows.length, rowsWritten: written };
 }
 
 /** Page grain, per date. */
@@ -180,8 +206,9 @@ export async function syncGscPages(opts: SyncOptions): Promise<SyncResult> {
     written++;
   }
 
-  await saveCursor(opts.websiteId, dataset, to, "ok");
-  return { dataset, from: ymd(from), to: ymd(to), rowsFetched: rows.length, rowsWritten: written };
+  const cursorDate = latestRowDateOrFallback(rows, from);
+  await saveCursor(opts.websiteId, dataset, cursorDate, "ok");
+  return { dataset, from: ymd(from), to: ymd(cursorDate), rowsFetched: rows.length, rowsWritten: written };
 }
 
 /** country / device, per date. */
@@ -226,8 +253,9 @@ export async function syncGscDimension(
     written++;
   }
 
-  await saveCursor(opts.websiteId, dataset, to, "ok");
-  return { dataset, from: ymd(from), to: ymd(to), rowsFetched: rows.length, rowsWritten: written };
+  const cursorDate = latestRowDateOrFallback(rows, from);
+  await saveCursor(opts.websiteId, dataset, cursorDate, "ok");
+  return { dataset, from: ymd(from), to: ymd(cursorDate), rowsFetched: rows.length, rowsWritten: written };
 }
 
 /**
@@ -271,8 +299,9 @@ export async function syncGscQueryPages(opts: SyncOptions): Promise<SyncResult> 
     written++;
   }
 
-  await saveCursor(opts.websiteId, dataset, to, "ok");
-  return { dataset, from: ymd(from), to: ymd(to), rowsFetched: rows.length, rowsWritten: written };
+  const cursorDate = latestRowDateOrFallback(rows, from);
+  await saveCursor(opts.websiteId, dataset, cursorDate, "ok");
+  return { dataset, from: ymd(from), to: ymd(cursorDate), rowsFetched: rows.length, rowsWritten: written };
 }
 
 export async function syncAll(opts: SyncOptions): Promise<SyncResult[]> {

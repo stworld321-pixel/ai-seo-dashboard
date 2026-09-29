@@ -28,6 +28,11 @@ model User {
   name         String?
   passwordHash String?
   image        String?
+  isAdmin      Boolean  @default(false)
+  role         String   @default("USER")
+  plan         String   @default("STARTER")
+  status       String   @default("ACTIVE")
+  phone        String?
   createdAt    DateTime @default(now())
 
   memberships OrgMember[]
@@ -79,6 +84,14 @@ model Website {
   automationLevel Int      @default(2) // 1..5, see docs/06
   gscProperty     String?
   ga4PropertyId   String?
+  technology      String?
+  framework       String?
+  hosting         String?
+  faviconUrl      String?
+  publishingType  String   @default("none") // none | wordpress | shopify | github | webhook | manual
+  lastCrawledAt   DateTime?
+  lastGscSyncAt   DateTime?
+  lastGa4SyncAt   DateTime?
   createdAt       DateTime @default(now())
 
   org               Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -104,6 +117,19 @@ model Website {
   experiments       ContentExperiment[]
   learningSignals   LearningSignal[]
   notifications     Notification[]
+  aiPrompts         AiPrompt[]
+  aiCompetitors     AiCompetitor[]
+  geoOpportunities  GeoOpportunity[]
+  citationOpps      CitationOpportunity[]
+  entityNodes       EntityNode[]
+  redditOpps        RedditOpportunity[]
+  xOpps             XOpportunity[]
+  weeklyAiAudits    WeeklyAiAudit[]
+  aiPromptRuns      AiPromptRun[]
+  googleConnections GoogleConnection[]
+  gscProperties     GscProperty[]
+  ga4Properties     Ga4Property[]
+  publishingConnections PublishingConnection[]
 
   @@unique([orgId, url])
 }
@@ -279,12 +305,21 @@ model Keyword {
   positionPrev28   Float?
   trend            Trend    @default(FLAT)
   opportunityScore Float    @default(0)
+  isCustom         Boolean  @default(false)
+  tags             String[] @default([])
+  targetUrl        String?
+  targetPosition   Int?
+  liveRank         Float?
+  liveRankUrl      String?
+  lastCheckedAt    DateTime?
+  serpData         Json?
   updatedAt        DateTime @updatedAt
 
   website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@unique([websiteId, query])
   @@index([websiteId, opportunityScore(sort: Desc)])
+  @@index([websiteId, isCustom])
 }
 
 enum PageStatus {
@@ -644,3 +679,305 @@ model Notification {
 
   @@index([websiteId, readAt])
 }
+
+// ─────────────────────── AI Visibility Module ───────────────────────
+
+model AiPrompt {
+  id        String   @id @default(cuid())
+  websiteId String
+  text      String
+  country   String?
+  language  String   @default("en")
+  location  String?
+  industry  String?
+  intent    String?
+  priority  Int      @default(2)
+  status    String   @default("active")
+  source    String   @default("manual")
+  approved  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  website      Website               @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  runs         AiPromptRun[]
+  geoOpps      GeoOpportunity[]
+  auditResults WeeklyAiAuditResult[]
+
+  @@unique([websiteId, text])
+  @@index([websiteId, status])
+}
+
+model AiPromptRun {
+  id                   String   @id @default(cuid())
+  promptId             String
+  websiteId            String
+  engine               String
+  runAt                DateTime @default(now())
+  response             String?
+  brandMentioned       Boolean?
+  brandPosition        Int?
+  citationFound        Boolean?
+  citationUrl          String?
+  citationDomain       String?
+  competitorsMentioned String[] @default([])
+  sourceDomains        String[] @default([])
+  mentionContext       String?
+  sentiment            String?
+  confidence           Float    @default(1.0)
+  collectionMethod     String   @default("api")
+  errorMessage         String?
+
+  prompt  AiPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  website Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([promptId, runAt(sort: Desc)])
+  @@index([websiteId, engine, runAt(sort: Desc)])
+}
+
+model AiCompetitor {
+  id        String   @id @default(cuid())
+  websiteId String
+  name      String
+  domain    String
+  addedAt   DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, domain])
+}
+
+model GeoOpportunity {
+  id             String   @id @default(cuid())
+  websiteId      String
+  promptId       String?
+  engine         String?
+  gapType        String
+  title          String
+  description    String
+  recommendation String
+  priority       Int      @default(2)
+  status         String   @default("open")
+  detectedAt     DateTime @default(now())
+
+  website Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  prompt  AiPrompt? @relation(fields: [promptId], references: [id], onDelete: SetNull)
+
+  @@index([websiteId, status])
+}
+
+model CitationOpportunity {
+  id             String   @id @default(cuid())
+  websiteId      String
+  targetDomain   String
+  targetUrl      String?
+  whyRelevant    String
+  authorityNotes String?
+  action         String
+  status         String   @default("identified")
+  detectedAt     DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, status])
+}
+
+model EntityNode {
+  id          String   @id @default(cuid())
+  websiteId   String
+  name        String
+  type        String
+  description String?
+  pageUrl     String?
+  schemaType  String?
+  confidence  Float    @default(1.0)
+  createdAt   DateTime @default(now())
+
+  website       Website              @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  relationships EntityRelationship[] @relation("EntitySource")
+  targets       EntityRelationship[] @relation("EntityTarget")
+
+  @@unique([websiteId, name, type])
+}
+
+model EntityRelationship {
+  id           String @id @default(cuid())
+  sourceId     String
+  targetId     String
+  relationship String
+  confidence   Float  @default(1.0)
+
+  source EntityNode @relation("EntitySource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target EntityNode @relation("EntityTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId, relationship])
+}
+
+model RedditOpportunity {
+  id            String    @id @default(cuid())
+  websiteId     String
+  subreddit     String
+  postUrl       String
+  postTitle     String
+  question      String?
+  topic         String?
+  relevance     String    @default("relevant")
+  engagement    Int       @default(0)
+  postedAt      DateTime?
+  detectedAt    DateTime  @default(now())
+  status        String    @default("new")
+  draftResponse String?
+  approvedAt    DateTime?
+  postedUrl     String?
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, postUrl])
+  @@index([websiteId, status])
+}
+
+model XOpportunity {
+  id              String   @id @default(cuid())
+  websiteId       String
+  creatorHandle   String
+  postUrl         String?
+  topic           String
+  relevance       String   @default("relevant")
+  audienceNotes   String?
+  whyRelevant     String?
+  suggestedAction String?
+  draftContent    String?
+  status          String   @default("new")
+  detectedAt      DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, status])
+}
+
+model WeeklyAiAudit {
+  id             String   @id @default(cuid())
+  websiteId      String
+  weekStart      DateTime @db.Date
+  weekEnd        DateTime @db.Date
+  promptsTested  Int      @default(0)
+  mentionsTotal  Int      @default(0)
+  citationsTotal Int      @default(0)
+  newMentions    Int      @default(0)
+  lostMentions   Int      @default(0)
+  newCitations   Int      @default(0)
+  lostCitations  Int      @default(0)
+  opportunities  Int      @default(0)
+  summary        Json?
+  createdAt      DateTime @default(now())
+
+  website Website               @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  results WeeklyAiAuditResult[]
+
+  @@unique([websiteId, weekStart])
+  @@index([websiteId, weekStart(sort: Desc)])
+}
+
+model WeeklyAiAuditResult {
+  id             String   @id @default(cuid())
+  auditId        String
+  promptId       String
+  engine         String
+  brandMentioned Boolean?
+  citationFound  Boolean?
+  prevMentioned  Boolean?
+  prevCitation   Boolean?
+  changed        Boolean  @default(false)
+
+  audit  WeeklyAiAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  prompt AiPrompt      @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@index([auditId])
+}
+
+// ─────────────────────── Direct Google & Publishing Architecture ───────────────────────
+
+model GoogleConnection {
+  id                    String    @id @default(cuid())
+  websiteId             String
+  email                 String?
+  encryptedAccessToken  Bytes?
+  encryptedRefreshToken Bytes?
+  tokenIv               Bytes?
+  tokenTag              Bytes?
+  tokenExpiresAt        DateTime?
+  scopes                String[]  @default([])
+  status                String    @default("connected") // connected | expired | revoked | error
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  website       Website       @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  gscProperties GscProperty[]
+  ga4Properties Ga4Property[]
+
+  @@index([websiteId, status])
+}
+
+model GscProperty {
+  id                 String    @id @default(cuid())
+  websiteId          String
+  googleConnectionId String
+  propertyUrl        String
+  propertyType       String    @default("URL_PREFIX") // URL_PREFIX | DOMAIN
+  permissionLevel    String?
+  isSelected         Boolean   @default(false)
+  lastSyncAt         DateTime?
+  status             String    @default("active")
+
+  website          Website          @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  googleConnection GoogleConnection @relation(fields: [googleConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, propertyUrl])
+}
+
+model Ga4Property {
+  id                 String    @id @default(cuid())
+  websiteId          String
+  googleConnectionId String
+  accountId          String?
+  propertyId         String
+  propertyName       String?
+  isSelected         Boolean   @default(false)
+  lastSyncAt         DateTime?
+  status             String    @default("active")
+
+  website          Website          @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  googleConnection GoogleConnection @relation(fields: [googleConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, propertyId])
+}
+
+model PublishingConnection {
+  id              String    @id @default(cuid())
+  websiteId       String
+  type            String    // WORDPRESS | SHOPIFY | GITHUB | WEBHOOK | MANUAL
+  config          Json      @default("{}")
+  encryptedSecret Bytes?
+  secretIv        Bytes?
+  secretTag       Bytes?
+  status          String    @default("active")
+  lastPublishedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, type])
+}
+
+// ─────────────────────── System Settings ───────────────────────
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  category  String   @default("general")
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+

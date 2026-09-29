@@ -4,6 +4,8 @@ import { EmptyState, PageHeading } from "@/components/empty-state";
 import { MetricCard } from "@/components/metric-card";
 import { TopBar } from "@/components/top-bar";
 import { TrafficChart } from "@/components/traffic-chart";
+import { GoogleConnectCard } from "@/components/google-connect-card";
+import { prisma } from "@/server/db";
 import {
   countryName,
   delta,
@@ -49,17 +51,22 @@ export default async function SearchConsolePage(props: PageProps<"/performance/s
     );
   }
 
-  const { website, window, previous, range, canCompare, compareHint } = ctx;
+  const { website, window, prevTotals, range, canCompare, compareHint } = ctx;
 
-  const [series, totals, prevTotals, queries, pages, countries, devices] = await Promise.all([
-    getDailySeries(website.id, window),
-    getTotals(website.id, window),
-    getTotals(website.id, previous),
-    getQueryMetrics(website.id, window),
-    getPageMetrics(website.id, window),
-    getDimension(website.id, window, "country"),
-    getDimension(website.id, window, "device"),
-  ]);
+  const [series, totals, queries, pages, countries, devices, integrations, googleConn] =
+    await Promise.all([
+      getDailySeries(website.id, window),
+      getTotals(website.id, window),
+      getQueryMetrics(website.id, window),
+      getPageMetrics(website.id, window),
+      getDimension(website.id, window, "country"),
+      getDimension(website.id, window, "device"),
+      prisma.integration.findMany({ where: { websiteId: website.id } }),
+      prisma.googleConnection.findFirst({ where: { websiteId: website.id, status: "connected" } }),
+    ]);
+
+  const gscIntegration = integrations.find((i) => i.kind === "GSC" && i.status === "ACTIVE");
+  const isGscConnected = Boolean(gscIntegration) || Boolean(googleConn && website.gscProperty);
 
   const hasClicks = totals.clicks > 0;
 
@@ -71,17 +78,26 @@ export default async function SearchConsolePage(props: PageProps<"/performance/s
         range={range}
         lastSyncedAt={ctx.lastSyncedAt}
         dataThrough={window.to.toISOString().slice(0, 10)}
+        websiteId={website.id}
       />
 
       <div className="p-6">
-        <PageHeading
-          title="Search Console"
-          description={`${window.from.toISOString().slice(0, 10)} to ${window.to
-            .toISOString()
-            .slice(0, 10)} · ${series.length} days of data`}
-        />
+        {!isGscConnected ? (
+          <GoogleConnectCard
+            websiteId={website.id}
+            websiteName={website.name}
+            websiteUrl={website.url}
+          />
+        ) : (
+          <>
+            <PageHeading
+              title="Search Console"
+              description={`${window.from.toISOString().slice(0, 10)} to ${window.to
+                .toISOString()
+                .slice(0, 10)} · ${series.length} days of data`}
+            />
 
-        <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <MetricCard
             label="Clicks"
             value={formatNumber(totals.clicks)}
@@ -202,6 +218,8 @@ export default async function SearchConsolePage(props: PageProps<"/performance/s
             />
           </Card>
         </div>
+          </>
+        )}
       </div>
     </>
   );

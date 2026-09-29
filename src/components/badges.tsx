@@ -49,10 +49,12 @@ export function StatusBadge({
   tone = "neutral",
 }: {
   status: string;
-  tone?: "neutral" | "success" | "warning" | "danger";
+  tone?: "neutral" | "success" | "warning" | "danger" | "info" | "positive";
 }) {
   const tones = {
     neutral: "bg-[var(--color-surface-muted)] text-[var(--color-muted)] border-[var(--color-border)]",
+    info: "bg-[var(--color-info)]/15 text-[var(--color-info)] border-[var(--color-info)]/20",
+    positive: "bg-[var(--color-success-bg)] text-[var(--color-success)] border-[var(--color-success)]/20",
     success: "bg-[var(--color-success-bg)] text-[var(--color-success)] border-[var(--color-success)]/20",
     warning: "bg-[var(--color-warning-bg)] text-[var(--color-warning)] border-[var(--color-warning)]/20",
     danger: "bg-[var(--color-danger-bg)] text-[var(--color-danger)] border-[var(--color-danger)]/20",

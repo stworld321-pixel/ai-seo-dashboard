@@ -8,7 +8,7 @@ import type { QueryMetrics } from "@/lib/types";
  * for "is this listing underperforming?" is the site's own behaviour.
  *
  * When there is too little click data to fit (a brand-new site, or one with
- * zero clicks — which is the real state of litenatures.in today) we return
+ * zero clicks — which is common for new domains) we return
  * `null` from `expectedCtr()` rather than inventing a number. Callers must
  * handle null by reporting "no click data yet" instead of a fake gap.
  */

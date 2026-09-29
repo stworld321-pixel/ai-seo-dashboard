@@ -41,6 +41,52 @@ describe("WordPress provider", () => {
     // the capabilities contract. The base is used to build /wp-json paths.
     expect(wp.name).toBe("wordpress");
   });
+
+  it("resolves root homepage URL via pages link match", async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify([
+          {
+            id: 42,
+            slug: "home",
+            link: "https://example.test/",
+            type: "page",
+            modified: "2026-09-01T00:00:00Z",
+            title: { rendered: "Home" },
+            meta: { rank_math_title: "Example Home" },
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch;
+    try {
+      const wp = new WordPressProvider({ siteUrl: "https://example.test" });
+      const item = await wp.getByUrl("https://example.test/");
+      expect(item).not.toBeNull();
+      expect(item?.id).toBe("42");
+      expect(item?.seoTitle).toBe("Example Home");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it("throws a clear error when updateSeoMeta targets a non-existent item ID", async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response("Not Found", { status: 404, statusText: "Not Found" })) as typeof fetch;
+    try {
+      const wp = new WordPressProvider({
+        siteUrl: "https://example.test",
+        username: "admin",
+        appPassword: "xxxx xxxx",
+      });
+      await expect(wp.updateSeoMeta("99999", { seoTitle: "New" })).rejects.toThrow(
+        /not found/i,
+      );
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
 
 describe("Secret encryption", () => {

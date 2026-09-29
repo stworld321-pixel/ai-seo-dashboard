@@ -108,14 +108,16 @@ async function main() {
       create: {
         websiteId: website.id,
         url: o.targetUrl!,
-        title: item.title,
+        title: item.seoTitle ?? item.title,
+        h1: item.title,
         metaDescription: item.metaDescription,
         lastCrawledAt: new Date(),
         lastModifiedAt: new Date(item.modifiedAt),
         status: "OPTIMIZE",
       },
       update: {
-        title: item.title,
+        title: item.seoTitle ?? item.title,
+        h1: item.title,
         metaDescription: item.metaDescription,
         lastCrawledAt: new Date(),
         lastModifiedAt: new Date(item.modifiedAt),
@@ -124,10 +126,22 @@ async function main() {
     });
   }
 
+  console.log("\n4. Syncing full live WordPress catalog, WooCommerce orders, Rank Math links & Site Kit GA4...");
+  const { syncLiveWordPressCatalogAndTelemetry } = await import(
+    "../src/server/services/wordpress-sync"
+  );
+  const liveSync = await syncLiveWordPressCatalogAndTelemetry({
+    websiteId: website.id,
+    siteUrl: SITE,
+  });
+
   const pageCount = await prisma.pageRecord.count({ where: { websiteId: website.id } });
-  console.log(`\n   ${pageCount} page records stored`);
+  console.log(
+    `\n   ${pageCount} page records stored (${liveSync.syncedPages} live items synced | GA4=${liveSync.telemetry.ga4?.propertyId ?? "none"} | WC orders=${liveSync.telemetry.woocommerce?.totalOrders ?? 0} | RM links=${liveSync.telemetry.rankMathLinks?.totalLinks ?? 0})`,
+  );
 
   await prisma.$disconnect();
+  process.exit(0);
 }
 
 main().catch(async (err) => {

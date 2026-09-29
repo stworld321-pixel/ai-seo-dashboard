@@ -54,6 +54,13 @@ export function TrafficChart({ data }: { data: DailyMetrics[] }) {
             axisLine={false}
             width={36}
           />
+          <YAxis
+            yAxisId="pos"
+            orientation="right"
+            reversed
+            domain={[1, "auto"]}
+            hide
+          />
           <Tooltip
             contentStyle={{
               borderRadius: 10,
@@ -87,7 +94,7 @@ export function TrafficChart({ data }: { data: DailyMetrics[] }) {
             dot={false}
           />
           <Line
-            yAxisId="right"
+            yAxisId="pos"
             type="monotone"
             dataKey="position"
             name="Position"

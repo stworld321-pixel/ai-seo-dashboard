@@ -1,5 +1,7 @@
 import { prisma } from "@/server/db";
-import type { DailyMetrics, PageMetrics, QueryMetrics, Totals } from "@/lib/types";
+import type { DailyMetrics, Opportunity, PageMetrics, QueryMetrics, Totals } from "@/lib/types";
+import { classifyIntent } from "@/server/intelligence/intent";
+import { runOpportunityEngine } from "@/server/intelligence/opportunity-engine";
 
 /**
  * Read models for the dashboard. Everything here reads from OUR Postgres,
@@ -38,11 +40,25 @@ export async function resolveWindow(
   websiteId: string,
   range: RangeKey,
 ): Promise<Window | null> {
-  const latest = await prisma.gscDaily.findFirst({
+  let latest = await prisma.gscDaily.findFirst({
     where: { websiteId },
     orderBy: { date: "desc" },
     select: { date: true },
   });
+  if (!latest) {
+    latest = await prisma.gscQueryDaily.findFirst({
+      where: { websiteId },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    });
+  }
+  if (!latest) {
+    latest = await prisma.gscPageDaily.findFirst({
+      where: { websiteId },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    });
+  }
   if (!latest) return null;
 
   const to = dateOnly(latest.date);
@@ -113,15 +129,33 @@ export async function getComparisonTotals(
   return { totals: aggregate(rows), complete, daysCovered: rows.length };
 }
 
-/** Query-grain rollup over a window. */
+/** Query-grain rollup over a window, attributed to the best serving page when query+page rows exist. */
 export async function getQueryMetrics(
   websiteId: string,
   w: Window,
 ): Promise<QueryMetrics[]> {
-  const rows = await prisma.gscQueryDaily.findMany({
-    where: { websiteId, date: { gte: w.from, lte: w.to } },
-    select: { query: true, clicks: true, impressions: true, position: true },
-  });
+  const [rows, qpRows] = await Promise.all([
+    prisma.gscQueryDaily.findMany({
+      where: { websiteId, date: { gte: w.from, lte: w.to } },
+      select: { query: true, clicks: true, impressions: true, position: true },
+    }),
+    prisma.gscQueryPageDaily.findMany({
+      where: { websiteId, date: { gte: w.from, lte: w.to } },
+      select: { query: true, page: true, impressions: true },
+    }),
+  ]);
+
+  const pageByQuery = new Map<string, Map<string, number>>();
+  for (const r of qpRows) {
+    const inner = pageByQuery.get(r.query) ?? new Map<string, number>();
+    inner.set(r.page, (inner.get(r.page) ?? 0) + r.impressions);
+    pageByQuery.set(r.query, inner);
+  }
+  const bestPage = new Map<string, string>();
+  for (const [query, inner] of pageByQuery) {
+    const top = [...inner.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (top) bestPage.set(query, top[0]);
+  }
 
   const acc = new Map<string, { clicks: number; impressions: number; weighted: number }>();
   for (const r of rows) {
@@ -135,6 +169,48 @@ export async function getQueryMetrics(
   return [...acc.entries()]
     .map(([query, v]) => ({
       query,
+      clicks: v.clicks,
+      impressions: v.impressions,
+      ctr: v.impressions > 0 ? v.clicks / v.impressions : 0,
+      position: v.impressions > 0 ? v.weighted / v.impressions : 0,
+      ...(bestPage.has(query) ? { page: bestPage.get(query) } : {}),
+    }))
+    .sort((a, b) => b.impressions - a.impressions);
+}
+
+/** Query+Page grain rollup over a window, used for cannibalization detection. */
+export async function getQueryPageMetrics(
+  websiteId: string,
+  w: Window,
+): Promise<QueryMetrics[]> {
+  const rows = await prisma.gscQueryPageDaily.findMany({
+    where: { websiteId, date: { gte: w.from, lte: w.to } },
+    select: { query: true, page: true, clicks: true, impressions: true, position: true },
+  });
+
+  const acc = new Map<
+    string,
+    { query: string; page: string; clicks: number; impressions: number; weighted: number }
+  >();
+  for (const r of rows) {
+    const key = `${r.query}\0${r.page}`;
+    const cur = acc.get(key) ?? {
+      query: r.query,
+      page: r.page,
+      clicks: 0,
+      impressions: 0,
+      weighted: 0,
+    };
+    cur.clicks += r.clicks;
+    cur.impressions += r.impressions;
+    cur.weighted += r.position * r.impressions;
+    acc.set(key, cur);
+  }
+
+  return [...acc.values()]
+    .map((v) => ({
+      query: v.query,
+      page: v.page,
       clicks: v.clicks,
       impressions: v.impressions,
       ctr: v.impressions > 0 ? v.clicks / v.impressions : 0,
@@ -203,17 +279,103 @@ export async function getDimension(
     .sort((a, b) => b.impressions - a.impressions);
 }
 
-export async function getDefaultWebsite() {
+export async function getDefaultWebsite(websiteId?: string) {
+  let targetId = websiteId;
+  let currentUserOrgIds: string[] | null = null;
+  let isUserAdmin = false;
+
+  try {
+    const { getCurrentUser } = await import("@/server/auth");
+    const user = await getCurrentUser();
+    if (user) {
+      isUserAdmin = user.isAdmin;
+      if (!isUserAdmin) {
+        const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
+        currentUserOrgIds = memberships.map((m) => m.orgId).filter(Boolean);
+        if (currentUserOrgIds.length === 0 && user.orgId) {
+          currentUserOrgIds = [user.orgId];
+        }
+      }
+    }
+  } catch {
+    // Called outside HTTP request (e.g. CLI script)
+  }
+
+  if (!targetId) {
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      targetId = cookieStore.get("active_website_id")?.value || undefined;
+    } catch {
+      // Called outside a Next.js HTTP request (e.g. CLI script)
+    }
+  }
+
+  if (targetId && targetId !== "default") {
+    const found = await prisma.website.findUnique({ where: { id: targetId } });
+    if (found) {
+      // Regular users can only access their own organization's websites
+      if (!currentUserOrgIds || isUserAdmin || currentUserOrgIds.includes(found.orgId)) {
+        return found;
+      }
+    }
+  }
+
+  // Fallback to first website in the user's organization
+  if (currentUserOrgIds && !isUserAdmin) {
+    if (currentUserOrgIds.length === 0) return null;
+    return prisma.website.findFirst({
+      where: { orgId: { in: currentUserOrgIds } },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
   return prisma.website.findFirst({ orderBy: { createdAt: "asc" } });
 }
 
-export async function listWebsites() {
+export async function listWebsites(options?: { all?: boolean }) {
+  try {
+    const { getCurrentUser } = await import("@/server/auth");
+    const user = await getCurrentUser();
+    if (user) {
+      if (user.isAdmin && options?.all) {
+        return prisma.website.findMany({ orderBy: { createdAt: "asc" } });
+      }
+      const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
+      const orgIds = memberships.map((m) => m.orgId).filter(Boolean);
+      if (orgIds.length === 0 && user.orgId) orgIds.push(user.orgId);
+
+      if (orgIds.length > 0) {
+        return prisma.website.findMany({
+          where: { orgId: { in: orgIds } },
+          orderBy: { createdAt: "asc" },
+        });
+      }
+      return [];
+    }
+  } catch {
+    // Outside request context
+  }
   return prisma.website.findMany({ orderBy: { createdAt: "asc" } });
 }
 
-export async function getOpportunities(websiteId: string) {
+export async function getOpportunities(
+  websiteId: string,
+  status?: "OPEN" | "IN_PROGRESS" | "AWAITING_APPROVAL" | "DONE" | "DISMISSED" | "EXPIRED" | "ALL",
+) {
+  const where: {
+    websiteId: string;
+    status?: "OPEN" | "IN_PROGRESS" | "AWAITING_APPROVAL" | "DONE" | "DISMISSED" | "EXPIRED";
+  } = { websiteId };
+
+  if (status && status !== "ALL") {
+    where.status = status;
+  } else if (!status) {
+    where.status = "OPEN";
+  }
+
   return prisma.opportunity.findMany({
-    where: { websiteId, status: "OPEN" },
+    where,
     orderBy: { score: "desc" },
   });
 }
@@ -231,4 +393,285 @@ export async function getSyncStatus(websiteId: string) {
     .filter((d): d is Date => d !== null)
     .sort((a, b) => b.getTime() - a.getTime())[0];
   return { lastRunAt: lastRunAt ?? null, lastCompleteDate: lastCompleteDate ?? null, datasets: cursors.length };
+}
+
+/**
+ * Recomputes opportunities and Keyword rollups over the active 28d window,
+ * including query+page grain for cannibalization and previous-window metrics
+ * for decline detectors when baseline coverage is complete.
+ */
+export async function recomputeWebsiteOpportunities(
+  websiteId: string,
+  range: RangeKey = "28d",
+) {
+  let w = await resolveWindow(websiteId, range);
+  if (!w) {
+    const latestQuery = await prisma.gscQueryDaily.findFirst({
+      where: { websiteId },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    });
+    if (!latestQuery) {
+      return { opportunities: [], curve: { fitted: false, totalClicks: 0, byPosition: {}, expectedCtr: () => null }, queries: [], pages: [], queryPages: [] };
+    }
+    const to = dateOnly(latestQuery.date);
+    const days = RANGE_DAYS[range];
+    w = { from: addDays(to, -(days - 1)), to, days };
+  }
+
+  const prev = previousWindow(w);
+  const [queries, pages, queryPages, prevComparison, signals] = await Promise.all([
+    getQueryMetrics(websiteId, w),
+    getPageMetrics(websiteId, w),
+    getQueryPageMetrics(websiteId, w),
+    getComparisonTotals(websiteId, prev),
+    prisma.learningSignal.findMany({ where: { websiteId } }),
+  ]);
+
+  const [previousQueries, previousPages] = prevComparison.complete
+    ? await Promise.all([getQueryMetrics(websiteId, prev), getPageMetrics(websiteId, prev)])
+    : [undefined, undefined];
+
+  const learnedWeights: Record<string, number> = {};
+  for (const s of signals) {
+    learnedWeights[s.signal] = s.weight;
+  }
+
+  const { opportunities: baseOpportunities, curve } = runOpportunityEngine({
+    queries,
+    pages,
+    queryPages,
+    previousQueries,
+    previousPages,
+    learnedWeights,
+  });
+
+  const website = await prisma.website.findUnique({ where: { id: websiteId } });
+  const brandName = website?.name?.trim() || "brand";
+
+  const pageRecords = await prisma.pageRecord.findMany({ where: { websiteId } });
+  const recByUrl = new Map(pageRecords.map((r) => [r.url.replace(/\/+$/, ""), r]));
+  const coveredUrls = new Set(
+    baseOpportunities
+      .map((o) => o.targetUrl?.replace(/\/+$/, ""))
+      .filter((u): u is string => Boolean(u)),
+  );
+
+  const extraOpportunities = [...baseOpportunities];
+  for (const p of pages) {
+    const normUrl = p.page.replace(/\/+$/, "");
+    if (coveredUrls.has(normUrl) || p.page.includes("?")) continue;
+    const rec = recByUrl.get(normUrl);
+    const detail = (rec?.contentScoreDetail ?? {}) as { focusKeyword?: string | null };
+    const slugKw =
+      new URL(p.page).pathname
+        .replace(/\/+$/, "")
+        .split("/")
+        .pop()
+        ?.replace(/-/g, " ") || `${brandName} services`;
+    const kw = (detail.focusKeyword || slugKw).toLowerCase();
+
+    if (p.position <= 10.5 && p.impressions >= 8 && p.clicks === 0) {
+      coveredUrls.add(normUrl);
+      extraOpportunities.push({
+        type: "QUICK_WIN",
+        keyword: kw,
+        targetUrl: p.page,
+        score: Number((p.impressions * 0.08 * Math.log10(p.impressions + 10)).toFixed(3)),
+        priority: 2,
+        estimatedClicks: null,
+        why: `Page "${p.page}" ranks on Page 1 at position ${p.position.toFixed(1)} with ${p.impressions} Search Console impressions and 0 clicks${!rec?.metaDescription ? " (meta description is currently empty)" : ""}.`,
+        evidence: {
+          impressions: p.impressions,
+          clicks: p.clicks,
+          ctr: 0,
+          position: Number(p.position.toFixed(2)),
+          contentScore: rec?.contentScore ?? null,
+        },
+        recommendation: [
+          { action: "Rewrite SEO title & meta description", detail: "Add benefit-driven CTA to convert page-1 impressions into clicks." },
+          { action: "Add FAQ schema block", detail: "Win rich snippet space on Google page 1." },
+        ],
+      });
+    } else if (p.position > 10.5 && p.position <= 20.5 && p.impressions >= 10) {
+      coveredUrls.add(normUrl);
+      extraOpportunities.push({
+        type: "PAGE_TWO",
+        keyword: kw,
+        targetUrl: p.page,
+        score: Number((p.impressions * 0.05 * Math.log10(p.impressions + 10) * 0.8).toFixed(3)),
+        priority: 3,
+        estimatedClicks: null,
+        why: `Page "${p.page}" ranks on Page 2 at position ${p.position.toFixed(1)} with ${p.impressions} impressions — expanding content and internal links can push it into the Top 10.`,
+        evidence: {
+          impressions: p.impressions,
+          clicks: p.clicks,
+          position: Number(p.position.toFixed(2)),
+          targetPosition: 8,
+          contentScore: rec?.contentScore ?? null,
+        },
+        recommendation: [
+          { action: "Expand page copy with subtopic headings & expert guidance" },
+          { action: "Add contextual internal links from high-impression pages" },
+        ],
+      });
+    } else if (p.impressions >= 50 && p.position > 20.5) {
+      coveredUrls.add(normUrl);
+      extraOpportunities.push({
+        type: "CONTENT_DECAY",
+        keyword: kw,
+        targetUrl: p.page,
+        score: Number((p.impressions * 0.03 * Math.log10(p.impressions + 10)).toFixed(3)),
+        priority: 4,
+        estimatedClicks: null,
+        why: `High-demand page "${p.page}" earned ${p.impressions} impressions over 28 days but ranks deep at position ${p.position.toFixed(1)}.`,
+        evidence: {
+          impressions: p.impressions,
+          clicks: p.clicks,
+          position: Number(p.position.toFixed(2)),
+          contentScore: rec?.contentScore ?? null,
+        },
+        recommendation: [
+          { action: "Publish a dedicated comparison & guide targeting this keyword" },
+          { action: "Ensure page status is published and indexed in search engines" },
+        ],
+      });
+    }
+  }
+
+  // Include custom tracked keywords as high-priority Blog & Content Opportunities
+  const customKeywords = await prisma.keyword.findMany({
+    where: { websiteId, isCustom: true },
+  });
+
+  const existingOppKeywords = new Set(
+    extraOpportunities
+      .map((o) => o.keyword?.toLowerCase().trim())
+      .filter((k): k is string => Boolean(k)),
+  );
+
+  for (const ck of customKeywords) {
+    const ckLower = ck.query.toLowerCase().trim();
+    if (!existingOppKeywords.has(ckLower)) {
+      existingOppKeywords.add(ckLower);
+      const isTop5 = (ck.liveRank ?? 99) <= 5;
+      const isPage2 = (ck.liveRank ?? 99) > 10 && (ck.liveRank ?? 99) <= 20;
+
+      extraOpportunities.push({
+        type: isTop5 ? "QUICK_WIN" : isPage2 ? "PAGE_TWO" : "CONTENT_GAP",
+        keyword: ck.query,
+        targetUrl: ck.liveRankUrl ?? ck.targetUrl ?? undefined,
+        score: Number(((ck.opportunityScore ?? 75) * 1.5).toFixed(3)),
+        priority: 1,
+        estimatedClicks: null,
+        why: `Custom tracked keyword "${ck.query}" targeted for high ROI and Page-1 Google dominance.${
+          ck.liveRank ? ` Current Live Rank: #${ck.liveRank}.` : ""
+        }`,
+        evidence: {
+          impressions: ck.impressions28,
+          clicks: ck.clicks28,
+          position: ck.liveRank ?? ck.position28 ?? 0,
+          opportunityScore: ck.opportunityScore ?? 75,
+        },
+        recommendation: [
+          {
+            action: "Generate AI Article Draft",
+            detail: `Synthesize a high-CTR, AEO+GEO optimized blog post targeting "${ck.query}".`,
+          },
+          { action: "Optimize Title & Meta Description", detail: "Incorporate primary search intent with a compelling call-to-action." },
+          { action: "Add FAQ Schema block", detail: "Target People Also Ask & AI Overview citations." },
+        ],
+      });
+    }
+  }
+
+  const sortedOpps = [...extraOpportunities].sort((a, b) => b.score - a.score);
+  const totalOpps = sortedOpps.length;
+  const opportunities = sortedOpps.map((o, i) => {
+    const rank = totalOpps <= 1 ? 1 : 1 - i / totalOpps;
+    const priority =
+      rank >= 0.85 ? 1 : rank >= 0.65 ? 2 : rank >= 0.4 ? 3 : rank >= 0.15 ? 4 : 5;
+    return { ...o, priority };
+  });
+
+  // Persist Keyword rollups for the 28-day window.
+  const prevByQuery = new Map((previousQueries ?? []).map((q) => [q.query, q]));
+  const scoreByQuery = new Map<string, number>();
+  for (const o of opportunities) {
+    if (o.keyword) {
+      scoreByQuery.set(o.keyword, Math.max(scoreByQuery.get(o.keyword) ?? 0, o.score));
+    }
+  }
+
+  for (const q of queries) {
+    const { intent, confidence } = classifyIntent(q.query);
+    const prevQ = prevByQuery.get(q.query);
+    const trend = !prevQ
+      ? previousQueries
+        ? "NEW"
+        : "FLAT"
+      : q.clicks > prevQ.clicks || (prevQ.position - q.position >= 1.5)
+        ? "UP"
+        : q.clicks < prevQ.clicks || (q.position - prevQ.position >= 1.5)
+          ? "DOWN"
+          : "FLAT";
+
+    await prisma.keyword.upsert({
+      where: { websiteId_query: { websiteId, query: q.query } },
+      create: {
+        websiteId,
+        query: q.query,
+        intent,
+        intentConfidence: confidence,
+        bestPage: q.page ?? null,
+        clicks28: q.clicks,
+        impressions28: q.impressions,
+        ctr28: q.ctr,
+        position28: q.position,
+        clicksPrev28: prevQ?.clicks ?? 0,
+        positionPrev28: prevQ?.position ?? null,
+        trend,
+        opportunityScore: scoreByQuery.get(q.query) ?? 0,
+      },
+      update: {
+        intent,
+        intentConfidence: confidence,
+        bestPage: q.page ?? null,
+        clicks28: q.clicks,
+        impressions28: q.impressions,
+        ctr28: q.ctr,
+        position28: q.position,
+        clicksPrev28: prevQ?.clicks ?? 0,
+        positionPrev28: prevQ?.position ?? null,
+        trend,
+        opportunityScore: scoreByQuery.get(q.query) ?? 0,
+      },
+    });
+  }
+
+  // Persist open opportunities so the dashboard reads them directly from Postgres.
+  await prisma.opportunity.deleteMany({ where: { websiteId, status: "OPEN" } });
+  const mappedOpportunities: (Opportunity & { id: string })[] = [];
+  for (const o of opportunities) {
+    const created = await prisma.opportunity.create({
+      data: {
+        websiteId,
+        type: o.type,
+        targetUrl: o.targetUrl ?? null,
+        keyword: o.keyword ?? null,
+        priority: o.priority,
+        score: o.score,
+        estimatedClicks: o.estimatedClicks,
+        why: o.why,
+        evidence: o.evidence,
+        recommendation: o.recommendation,
+      },
+    });
+    mappedOpportunities.push({
+      ...o,
+      id: created.id,
+    });
+  }
+
+  return { opportunities: mappedOpportunities, curve, queries, pages, queryPages };
 }

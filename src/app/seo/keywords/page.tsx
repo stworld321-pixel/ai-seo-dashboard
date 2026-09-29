@@ -1,27 +1,17 @@
-import { Card, CardHeader } from "@/components/card";
-import { DataTable } from "@/components/data-table";
 import { EmptyState, PageHeading } from "@/components/empty-state";
-import { MetricCard } from "@/components/metric-card";
 import { TopBar } from "@/components/top-bar";
-import { formatNumber, formatPercent, formatPosition } from "@/lib/format";
 import { getQueryMetrics } from "@/server/services/dashboard";
 import { loadPageContext } from "@/server/services/page-context";
-import { BAND_LABELS, classifyIntent, positionBand } from "@/server/intelligence/intent";
+import { classifyIntent, positionBand } from "@/server/intelligence/intent";
+import { prisma } from "@/server/db";
+import { KeywordsClientView, type KeywordRow } from "@/components/keywords-client-view";
+import type { GoogleSerpData } from "@/server/services/google-serp";
 
 export const dynamic = "force-dynamic";
 
-const INTENT_STYLES: Record<string, string> = {
-  TRANSACTIONAL: "bg-[var(--color-success-bg)] text-[var(--color-success)]",
-  COMMERCIAL: "bg-amber-50 text-amber-700",
-  INFORMATIONAL: "bg-blue-50 text-blue-700",
-  NAVIGATIONAL: "bg-[var(--color-surface-muted)] text-[var(--color-muted)]",
-  LOCAL: "bg-purple-50 text-purple-700",
-};
-
 /**
- * Keyword intelligence: every query we hold, with intent classification,
- * position banding and the trend-relevant metrics. Filterable by band via the
- * `band` query param.
+ * Keyword intelligence & Rank tracking:
+ * Combines Google Search Console queries + Custom tracked keywords + Live Google SERP checking.
  */
 export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
   const searchParams = await props.searchParams;
@@ -40,22 +30,171 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
   }
 
   const { website, window, range } = ctx;
-  const queries = await getQueryMetrics(website.id, window);
+  const hasGscConnected = Boolean(website.gscProperty);
 
-  const enriched = queries.map((q) => {
-    const { intent, confidence } = classifyIntent(q.query);
-    return { ...q, intent, confidence, band: positionBand(q.position) };
+  // If GSC is NOT connected, purge any old synthetic GSC rows so fake numbers are never shown
+  if (!hasGscConnected) {
+    await prisma.gscQueryDaily.deleteMany({ where: { websiteId: website.id } });
+    await prisma.gscPageDaily.deleteMany({ where: { websiteId: website.id } });
+    await prisma.gscQueryPageDaily.deleteMany({ where: { websiteId: website.id } });
+    await prisma.gscDaily.deleteMany({ where: { websiteId: website.id } });
+  }
+
+  // Clean up any unwanted keywords (privacy, terms, career, cookie, cart, checkout)
+  await prisma.keyword.deleteMany({
+    where: {
+      websiteId: website.id,
+      OR: [
+        { query: { in: ["learn more", "click here", "products", "page", "read more", "home", "contact"] } },
+        { query: { contains: "privacy" } },
+        { query: { contains: "terms" } },
+        { query: { contains: "career" } },
+        { query: { contains: "cookie" } },
+        { query: { contains: "policy" } },
+        { query: { contains: "cart" } },
+        { query: { contains: "checkout" } },
+        { query: { contains: "uncategorized" } },
+      ],
+    },
   });
 
-  const bandFilter = typeof searchParams.band === "string" ? searchParams.band : null;
-  const visible = bandFilter ? enriched.filter((q) => q.band === bandFilter) : enriched;
+  let [queries, dbKeywords, pageRecords] = await Promise.all([
+    hasGscConnected && window ? getQueryMetrics(website.id, window) : Promise.resolve([]),
+    prisma.keyword.findMany({
+      where: { websiteId: website.id },
+      orderBy: [{ isCustom: "desc" }, { clicks28: "desc" }],
+    }),
+    prisma.pageRecord.findMany({ where: { websiteId: website.id } }),
+  ]);
 
-  const counts = {
-    top3: enriched.filter((q) => q.band === "top3").length,
-    page1: enriched.filter((q) => q.band === "page1").length,
-    page2: enriched.filter((q) => q.band === "page2").length,
-    deep: enriched.filter((q) => q.band === "deep").length,
-  };
+  // If no monitored keywords exist yet but crawled pages exist, seed core service keywords
+  if (dbKeywords.length === 0 && pageRecords.length > 0) {
+    const { isUtilityOrLegalPage, generateCleanAnchor } = await import("@/server/intelligence/internal-links");
+    const seenKw = new Set<string>();
+
+    const corePages = pageRecords.filter((p) => !isUtilityOrLegalPage(p.url));
+    for (const p of corePages) {
+      const coreKw = generateCleanAnchor({
+        url: p.url,
+        title: p.title,
+        h1: p.h1,
+      }).toLowerCase().trim();
+
+      if (
+        coreKw &&
+        coreKw.length >= 4 &&
+        !seenKw.has(coreKw) &&
+        !coreKw.includes("privacy") &&
+        !coreKw.includes("terms") &&
+        !coreKw.includes("career")
+      ) {
+        seenKw.add(coreKw);
+        await prisma.keyword.create({
+          data: {
+            websiteId: website.id,
+            query: coreKw,
+            intent: coreKw.includes("service") || coreKw.includes("company") || coreKw.includes("development") ? "COMMERCIAL" : "INFORMATIONAL",
+            bestPage: p.url,
+            opportunityScore: 80,
+            isCustom: true,
+            clicks28: 0,
+            impressions28: 0,
+            ctr28: 0,
+          },
+        });
+      }
+    }
+
+    dbKeywords = await prisma.keyword.findMany({
+      where: { websiteId: website.id },
+      orderBy: [{ isCustom: "desc" }, { clicks28: "desc" }],
+    });
+  }
+
+  const dbMap = new Map(dbKeywords.map((k) => [k.query.toLowerCase(), k]));
+
+  // Merge GSC queries with DB records
+  const allRows: KeywordRow[] = [];
+  const processedQueries = new Set<string>();
+
+  for (const q of queries) {
+    const norm = q.query.toLowerCase();
+    // Skip unwanted utility queries
+    if (
+      norm.includes("privacy") ||
+      norm.includes("terms") ||
+      norm.includes("career") ||
+      norm.includes("cookie") ||
+      norm.includes("cart") ||
+      norm.includes("checkout")
+    ) {
+      continue;
+    }
+
+    processedQueries.add(norm);
+    const db = dbMap.get(norm);
+    const { intent, confidence } = classifyIntent(q.query);
+    const effectivePos = db?.liveRank ?? q.position;
+
+    allRows.push({
+      id: db?.id ?? `gsc-${norm}`,
+      query: q.query,
+      intent: (db?.intent as string) ?? intent,
+      intentConfidence: db?.intentConfidence ?? confidence,
+      isCustom: db?.isCustom ?? false,
+      tags: db?.tags ?? [],
+      targetUrl: db?.targetUrl ?? q.page ?? null,
+      targetPosition: db?.targetPosition ?? null,
+      liveRank: db?.liveRank ?? null,
+      liveRankUrl: db?.liveRankUrl ?? null,
+      lastCheckedAt: db?.lastCheckedAt ?? null,
+      serpData: (db?.serpData as unknown as GoogleSerpData) ?? null,
+      clicks28: hasGscConnected ? q.clicks : 0,
+      impressions28: hasGscConnected ? q.impressions : 0,
+      ctr28: hasGscConnected ? q.ctr : 0,
+      position28: hasGscConnected ? q.position : null,
+      opportunityScore: db?.opportunityScore ?? 0,
+      band: positionBand(effectivePos),
+    });
+  }
+
+  // Include custom keywords that might not have GSC impressions yet
+  for (const db of dbKeywords) {
+    const norm = db.query.toLowerCase();
+    if (processedQueries.has(norm)) continue;
+    if (
+      norm.includes("privacy") ||
+      norm.includes("terms") ||
+      norm.includes("career") ||
+      norm.includes("cookie")
+    ) {
+      continue;
+    }
+
+    const { intent, confidence } = classifyIntent(db.query);
+    const effectivePos = db.liveRank ?? (hasGscConnected ? db.position28 : null) ?? 999;
+
+    allRows.push({
+      id: db.id,
+      query: db.query,
+      intent: (db.intent as string) ?? intent,
+      intentConfidence: db.intentConfidence ?? confidence,
+      isCustom: db.isCustom,
+      tags: db.tags,
+      targetUrl: db.targetUrl ?? null,
+      targetPosition: db.targetPosition ?? null,
+      liveRank: db.liveRank ?? null,
+      liveRankUrl: db.liveRankUrl ?? null,
+      lastCheckedAt: db.lastCheckedAt ?? null,
+      serpData: (db.serpData as unknown as GoogleSerpData) ?? null,
+      clicks28: hasGscConnected ? db.clicks28 : 0,
+      impressions28: hasGscConnected ? db.impressions28 : 0,
+      ctr28: hasGscConnected ? db.ctr28 : 0,
+      position28: hasGscConnected ? db.position28 : null,
+      opportunityScore: db.opportunityScore,
+      band: positionBand(effectivePos),
+    });
+  }
 
   return (
     <>
@@ -69,90 +208,15 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
 
       <div className="p-6">
         <PageHeading
-          title="Keywords"
-          description={`${enriched.length} queries with impressions. Intent is classified by rule, with confidence shown.`}
+          title="Keywords & Google Rank Tracking"
+          description={`${allRows.length} monitored queries — Track GSC impressions, add custom target keywords, and inspect live Google SERP competitor rankings.`}
         />
 
-        <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <MetricCard label="Top 3" value={formatNumber(counts.top3)} deltaLabel="positions 1-3" />
-          <MetricCard label="Page 1" value={formatNumber(counts.page1)} deltaLabel="positions 4-10" />
-          <MetricCard label="Page 2" value={formatNumber(counts.page2)} deltaLabel="positions 11-20" />
-          <MetricCard label="Beyond" value={formatNumber(counts.deep)} deltaLabel="position 21+" />
-        </section>
-
-        <Card className="mt-6">
-          <CardHeader
-            title={bandFilter ? `Keywords — ${BAND_LABELS[bandFilter as keyof typeof BAND_LABELS] ?? bandFilter}` : "All keywords"}
-            subtitle={`${visible.length} shown`}
-            action={
-              <div className="flex gap-1 text-xs">
-                <a
-                  href={`/seo/keywords?range=${range}`}
-                  className={`rounded px-2 py-1 ${!bandFilter ? "bg-[var(--color-primary)] text-[var(--color-primary-fg)]" : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"}`}
-                >
-                  All
-                </a>
-                {(["top3", "page1", "page2", "deep"] as const).map((b) => (
-                  <a
-                    key={b}
-                    href={`/seo/keywords?range=${range}&band=${b}`}
-                    className={`rounded px-2 py-1 ${bandFilter === b ? "bg-[var(--color-primary)] text-[var(--color-primary-fg)]" : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"}`}
-                  >
-                    {BAND_LABELS[b]}
-                  </a>
-                ))}
-              </div>
-            }
-          />
-          <DataTable
-            rows={visible}
-            getKey={(r) => r.query}
-            empty="No keywords match this filter"
-            columns={[
-              {
-                key: "q",
-                header: "Keyword",
-                render: (r) => <span className="font-medium">{r.query}</span>,
-              },
-              {
-                key: "intent",
-                header: "Intent",
-                render: (r) => (
-                  <span
-                    className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${INTENT_STYLES[r.intent]}`}
-                    title={`confidence ${(r.confidence * 100).toFixed(0)}%`}
-                  >
-                    {r.intent.toLowerCase()}
-                    {r.confidence < 0.5 ? (
-                      <span className="ml-1 opacity-60">?</span>
-                    ) : null}
-                  </span>
-                ),
-              },
-              { key: "i", header: "Impr.", align: "right", render: (r) => formatNumber(r.impressions) },
-              { key: "c", header: "Clicks", align: "right", render: (r) => formatNumber(r.clicks) },
-              { key: "t", header: "CTR", align: "right", render: (r) => formatPercent(r.ctr) },
-              {
-                key: "p",
-                header: "Position",
-                align: "right",
-                render: (r) => (
-                  <span
-                    className={
-                      r.position <= 10
-                        ? "font-semibold text-[var(--color-success)]"
-                        : r.position <= 20
-                          ? "text-[var(--color-warning)]"
-                          : "text-[var(--color-muted)]"
-                    }
-                  >
-                    {formatPosition(r.position)}
-                  </span>
-                ),
-              },
-            ]}
-          />
-        </Card>
+        <KeywordsClientView
+          websiteId={website.id}
+          websiteUrl={website.url}
+          initialKeywords={allRows}
+        />
       </div>
     </>
   );

@@ -171,6 +171,29 @@ describe("Cannibalization", () => {
     const text = JSON.stringify(out).toLowerCase();
     expect(text).not.toContain("delete");
   });
+
+  it("detects cannibalization via queryPages when queries is deduplicated", () => {
+    const r = runOpportunityEngine({
+      queries: [
+        { query: "tmt bar price", clicks: 0, impressions: 115, ctr: 0, position: 13, page: "https://a.com/1" },
+      ],
+      pages: [],
+      queryPages: [
+        { query: "tmt bar price", clicks: 0, impressions: 60, ctr: 0, position: 12, page: "https://a.com/1" },
+        { query: "tmt bar price", clicks: 0, impressions: 55, ctr: 0, position: 14, page: "https://a.com/2" },
+      ],
+    });
+    expect(r.opportunities.some((o) => o.type === "CANNIBALIZATION")).toBe(true);
+  });
+
+  it("preserves database id across todaysActions", () => {
+    const items = [
+      { id: "opp-1", type: "DECLINING_PAGE", score: 10 },
+      { id: "opp-2", type: "DECLINING_PAGE", score: 5 },
+    ];
+    const picked = todaysActions(items, 5);
+    expect(picked.map((p) => p.id)).toEqual(["opp-1", "opp-2"]);
+  });
 });
 
 describe("Robustness", () => {

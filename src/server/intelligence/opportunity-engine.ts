@@ -19,6 +19,8 @@ export type EngineInput = {
   queries: QueryMetrics[];
   /** Current window, page grain. */
   pages: PageMetrics[];
+  /** Current window, query+page grain for cannibalization detection (optional; falls back to `queries`). */
+  queryPages?: QueryMetrics[];
   /** Previous window of equal length, query grain (optional). */
   previousQueries?: QueryMetrics[];
   /** Previous window of equal length, page grain (optional). */
@@ -321,7 +323,7 @@ export function detectCannibalization(rows: QueryMetrics[]): Opportunity[] {
  * Assign 1..5 priority within this website's set.
  *
  * Rank is derived from descending score ORDER, not from `percentileRank`:
- * with a small result set (litenatures.in currently yields two opportunities)
+ * with a small result set (a new domain might yield only two opportunities)
  * a tie-aware percentile puts the best item at ~0.75 and it would never be
  * labelled P1. The top opportunity must always be P1.
  */
@@ -344,7 +346,7 @@ export function runOpportunityEngine(input: EngineInput): EngineResult {
     ...ctrGaps(input, curve),
     ...decliningKeywords(input),
     ...decliningPages(input),
-    ...detectCannibalization(input.queries),
+    ...detectCannibalization(input.queryPages ?? input.queries),
   ];
 
   const ranked = assignPriorities(all).sort((a, b) => b.score - a.score);
@@ -356,9 +358,12 @@ export function runOpportunityEngine(input: EngineInput): EngineResult {
  * opportunity type, so the user gets a diverse plan rather than five variants
  * of the same fix.
  */
-export function todaysActions(opportunities: Opportunity[], limit = 5): Opportunity[] {
+export function todaysActions<T extends { type: string }>(
+  opportunities: T[],
+  limit = 5,
+): T[] {
   const seen = new Set<string>();
-  const picked: Opportunity[] = [];
+  const picked: T[] = [];
   for (const o of opportunities) {
     if (seen.has(o.type)) continue;
     seen.add(o.type);
