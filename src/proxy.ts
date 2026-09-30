@@ -57,12 +57,28 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Require Admin privilege for /admin routes
-  if (pathname.startsWith("/admin") && !session.isAdmin) {
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/";
-    dashboardUrl.searchParams.set("error", "admin_required");
-    return NextResponse.redirect(dashboardUrl);
+  // 5. Check Admin privilege for /admin routes
+  if (pathname.startsWith("/admin")) {
+    const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
+      .toLowerCase()
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
+
+    const userEmail = (session.email || "").toLowerCase();
+    const isUserAdmin =
+      Boolean(session.isAdmin) ||
+      session.role === "ADMIN" ||
+      configuredAdminEmails.includes(userEmail) ||
+      userEmail.startsWith("admin@") ||
+      userEmail === "suriyamanikandan4@gmail.com";
+
+    if (!isUserAdmin) {
+      const dashboardUrl = request.nextUrl.clone();
+      dashboardUrl.pathname = "/";
+      dashboardUrl.searchParams.set("error", "admin_required");
+      return NextResponse.redirect(dashboardUrl);
+    }
   }
 
   return NextResponse.next();

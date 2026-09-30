@@ -3,6 +3,10 @@ import { prisma } from "@/server/db";
 import { getDefaultWebsite } from "@/server/services/dashboard";
 import { classifyIntent, positionBand } from "@/server/intelligence/intent";
 import { fetchGoogleSerpData } from "@/server/services/google-serp";
+import { getCurrentUser } from "@/server/auth";
+import { deductCredits, CREDIT_COSTS } from "@/server/services/credits";
+
+import { isStoplistedKeyword, HARD_STOPLIST } from "@/server/intelligence/keyword-research";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -18,6 +22,18 @@ export async function GET(request: Request) {
       { error: { code: "NOT_FOUND", message: "No website found" } },
       { status: 404 },
     );
+  }
+
+  // Purge any lingering stoplisted records from the database
+  try {
+    await prisma.keyword.deleteMany({
+      where: {
+        websiteId: website.id,
+        query: { in: Array.from(HARD_STOPLIST) },
+      },
+    });
+  } catch {
+    // non-fatal
   }
 
   const where: {
@@ -48,10 +64,12 @@ export async function GET(request: Request) {
     orderBy: [{ isCustom: "desc" }, { clicks28: "desc" }, { impressions28: "desc" }],
   });
 
-  const enriched = keywords.map((k) => ({
-    ...k,
-    band: positionBand(k.liveRank ?? k.position28 ?? 999),
-  }));
+  const enriched = keywords
+    .filter((k) => !isStoplistedKeyword(k.query))
+    .map((k) => ({
+      ...k,
+      band: positionBand(k.liveRank ?? k.position28 ?? 999),
+    }));
 
   const filtered = bandParam ? enriched.filter((k) => k.band === bandParam) : enriched;
 
@@ -90,12 +108,28 @@ export async function POST(request: Request) {
     );
   }
 
+  const currentUser = await getCurrentUser();
+  if (currentUser) {
+    const cost = rawKeywords.length * CREDIT_COSTS.KEYWORD_SEARCH;
+    const deduction = await deductCredits({
+      userId: currentUser.id,
+      amount: cost,
+      reason: `Keyword research for ${rawKeywords.length} queries (${cost} credits)`,
+    });
+    if (!deduction.success) {
+      return NextResponse.json(
+        { error: { code: "INSUFFICIENT_CREDITS", message: deduction.error } },
+        { status: 402 },
+      );
+    }
+  }
+
   const country = body.country || "in";
   const createdKeywords = [];
 
   for (const rawKw of rawKeywords) {
     const kw = rawKw.trim();
-    if (!kw) continue;
+    if (!kw || isStoplistedKeyword(kw)) continue;
 
     const { intent, confidence } = classifyIntent(kw);
 

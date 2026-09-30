@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { getDefaultWebsite } from "@/server/services/dashboard";
 import { executePromptRun, runWeeklyAudit } from "@/server/services/ai-visibility";
+import { getCurrentUser } from "@/server/auth";
+import { deductCredits, CREDIT_COSTS } from "@/server/services/credits";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
@@ -14,6 +16,23 @@ export async function POST(request: Request) {
   const website = await getDefaultWebsite(body.websiteId);
   if (!website) {
     return NextResponse.json({ error: { message: "Website not found" } }, { status: 404 });
+  }
+
+  const currentUser = await getCurrentUser();
+  if (currentUser) {
+    const totalRuns = (body.engines && body.engines.length > 0 ? body.engines.length : 4) * (body.runAll ? 5 : 1);
+    const cost = Math.max(1, totalRuns * CREDIT_COSTS.AI_CITATION);
+    const deduction = await deductCredits({
+      userId: currentUser.id,
+      amount: cost,
+      reason: `AI Citation Audit for ${website.name} (${cost} credits)`,
+    });
+    if (!deduction.success) {
+      return NextResponse.json(
+        { error: { code: "INSUFFICIENT_CREDITS", message: deduction.error } },
+        { status: 402 },
+      );
+    }
   }
 
   const engines =

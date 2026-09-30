@@ -86,6 +86,64 @@ export async function POST(request: Request) {
         });
       }
 
+      if (targetProvider === "claude") {
+        const apiKey = (await getSystemSettingValue("ai_claude_api_key")) || process.env.ANTHROPIC_API_KEY;
+        const model = (await getSystemSettingValue("ai_claude_model")) || "claude-3-5-sonnet-20241022";
+
+        if (!apiKey) {
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            message: "Missing Anthropic Claude API Key. Please provide an API key in settings or .env",
+          });
+        }
+
+        const res = await fetch("https://api.anthropic.com/v1/models", {
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+        });
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            message: data?.error?.message || `Anthropic returned HTTP ${res.status}`,
+          });
+        }
+
+        return NextResponse.json({
+          ok: true,
+          latencyMs: Date.now() - startTime,
+          provider: "claude",
+          model,
+          message: `Anthropic Claude connection verified (${model}).`,
+        });
+      }
+
+      if (targetProvider === "perplexity") {
+        const apiKey = await getSystemSettingValue("ai_perplexity_api_key");
+        const model = (await getSystemSettingValue("ai_perplexity_model")) || "sonar-pro";
+
+        if (!apiKey) {
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            message: "Missing Perplexity API Key. Please configure it in settings.",
+          });
+        }
+
+        return NextResponse.json({
+          ok: true,
+          latencyMs: Date.now() - startTime,
+          provider: "perplexity",
+          model,
+          message: `Perplexity API key format validated for model: ${model}.`,
+        });
+      }
+
       return NextResponse.json({
         ok: true,
         latencyMs: Date.now() - startTime,

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Users,
   Globe,
@@ -81,6 +82,17 @@ type TabType =
   | "plans_payments"
   | "websites";
 
+const VALID_TABS = new Set<TabType>([
+  "overview",
+  "users",
+  "ai_models",
+  "developer_connect",
+  "google_auth",
+  "whatsapp",
+  "plans_payments",
+  "websites",
+]);
+
 export function AdminDashboardClient({
   users: initialUsers,
   websites,
@@ -94,7 +106,29 @@ export function AdminDashboardClient({
   initialSettings: Record<string, SystemSettingItem>;
   currentAdminEmail: string;
 }) {
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab") as TabType | null;
+
+  const [activeTab, setActiveTab] = useState<TabType>(
+    tabFromUrl && VALID_TABS.has(tabFromUrl) ? tabFromUrl : "overview",
+  );
+
+  useEffect(() => {
+    const t = searchParams.get("tab") as TabType | null;
+    if (t && VALID_TABS.has(t) && t !== activeTab) {
+      setActiveTab(t);
+    }
+  }, [searchParams, activeTab]);
+
+  function switchTab(tab: TabType) {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.pushState({}, "", url.toString());
+    }
+  }
+
   const [users, setUsers] = useState<AdminUserItem[]>(initialUsers);
   const [settings, setSettings] = useState<Record<string, string>>(() => {
     const s: Record<string, string> = {};
@@ -343,7 +377,7 @@ export function AdminDashboardClient({
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 text-xs shadow-xs">
         <button
           type="button"
-          onClick={() => setActiveTab("overview")}
+          onClick={() => switchTab("overview")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "overview"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -356,7 +390,7 @@ export function AdminDashboardClient({
 
         <button
           type="button"
-          onClick={() => setActiveTab("users")}
+          onClick={() => switchTab("users")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "users"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -369,7 +403,7 @@ export function AdminDashboardClient({
 
         <button
           type="button"
-          onClick={() => setActiveTab("ai_models")}
+          onClick={() => switchTab("ai_models")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "ai_models"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -382,7 +416,7 @@ export function AdminDashboardClient({
 
         <button
           type="button"
-          onClick={() => setActiveTab("developer_connect")}
+          onClick={() => switchTab("developer_connect")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "developer_connect"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -395,7 +429,7 @@ export function AdminDashboardClient({
 
         <button
           type="button"
-          onClick={() => setActiveTab("google_auth")}
+          onClick={() => switchTab("google_auth")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "google_auth"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -408,7 +442,7 @@ export function AdminDashboardClient({
 
         <button
           type="button"
-          onClick={() => setActiveTab("whatsapp")}
+          onClick={() => switchTab("whatsapp")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "whatsapp"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -421,7 +455,7 @@ export function AdminDashboardClient({
 
         <button
           type="button"
-          onClick={() => setActiveTab("plans_payments")}
+          onClick={() => switchTab("plans_payments")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "plans_payments"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -434,7 +468,7 @@ export function AdminDashboardClient({
 
         <button
           type="button"
-          onClick={() => setActiveTab("websites")}
+          onClick={() => switchTab("websites")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors ${
             activeTab === "websites"
               ? "bg-[var(--color-primary)] text-white shadow-xs"
@@ -562,7 +596,7 @@ export function AdminDashboardClient({
                   <h3 className="text-sm font-semibold">Recent Registered Accounts</h3>
                   <button
                     type="button"
-                    onClick={() => setActiveTab("users")}
+                    onClick={() => switchTab("users")}
                     className="text-xs text-[var(--color-primary)] hover:underline flex items-center gap-1 font-medium"
                   >
                     View All ({users.length}) <ArrowUpRight size={13} />
@@ -660,7 +694,7 @@ export function AdminDashboardClient({
                 <div className="space-y-2">
                   <button
                     type="button"
-                    onClick={() => setActiveTab("ai_models")}
+                    onClick={() => switchTab("ai_models")}
                     className="w-full text-left p-2.5 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-muted)] transition-colors text-xs flex items-center justify-between"
                   >
                     <span className="flex items-center gap-2">
@@ -671,7 +705,7 @@ export function AdminDashboardClient({
 
                   <button
                     type="button"
-                    onClick={() => setActiveTab("whatsapp")}
+                    onClick={() => switchTab("whatsapp")}
                     className="w-full text-left p-2.5 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-muted)] transition-colors text-xs flex items-center justify-between"
                   >
                     <span className="flex items-center gap-2">
@@ -682,7 +716,7 @@ export function AdminDashboardClient({
 
                   <button
                     type="button"
-                    onClick={() => setActiveTab("plans_payments")}
+                    onClick={() => switchTab("plans_payments")}
                     className="w-full text-left p-2.5 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-muted)] transition-colors text-xs flex items-center justify-between"
                   >
                     <span className="flex items-center gap-2">
@@ -741,9 +775,9 @@ export function AdminDashboardClient({
                 className="px-2.5 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
               >
                 <option value="ALL">All Plans</option>
-                <option value="STARTER">Starter</option>
-                <option value="PRO">Pro</option>
-                <option value="ENTERPRISE">Enterprise</option>
+                <option value="BASIC">Basic ($29/mo)</option>
+                <option value="PRO">Pro ⭐ ($79/mo)</option>
+                <option value="ENTERPRISE">Enterprise ($199/mo)</option>
               </select>
             </div>
           </div>
@@ -804,15 +838,15 @@ export function AdminDashboardClient({
                     </td>
                     <td className="py-3 px-3">
                       <select
-                        value={u.plan}
+                        value={u.plan.toUpperCase() === "STARTER" ? "BASIC" : u.plan.toUpperCase()}
                         disabled={updatingUserId === u.id}
                         onChange={(e) => handleUpdateUser(u.id, { plan: e.target.value })}
                         aria-label={`Change subscription plan for ${u.name || u.email}`}
                         className="px-2 py-1 text-[11px] rounded border border-[var(--color-border)] bg-[var(--color-surface)] font-medium disabled:opacity-60"
                       >
-                        <option value="STARTER">Starter Free</option>
-                        <option value="PRO">Pro Growth</option>
-                        <option value="ENTERPRISE">Enterprise</option>
+                        <option value="BASIC">Basic ($29/mo)</option>
+                        <option value="PRO">Pro ⭐ ($79/mo)</option>
+                        <option value="ENTERPRISE">Enterprise ($199/mo)</option>
                       </select>
                     </td>
                     <td className="py-3 px-3 font-mono text-[11px] text-[var(--color-muted)]">
@@ -836,7 +870,7 @@ export function AdminDashboardClient({
                               setWaRecipient(u.phone);
                             }
                             setWaMessage(`Hello ${u.name || "there"}, this is an update regarding your SEO Dashboard.`);
-                            setActiveTab("whatsapp");
+                            switchTab("whatsapp");
                           }}
                           title="Message via WhatsApp"
                           className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded border border-emerald-200 dark:border-emerald-800 transition-colors"
@@ -930,17 +964,31 @@ export function AdminDashboardClient({
 
                 <div>
                   <label className="block text-[11px] font-medium text-[var(--color-muted)] mb-1">
-                    Default Gemini Model
+                    Gemini Model ID (Input Form)
                   </label>
-                  <select
-                    value={settings.ai_gemini_model || "gemini-2.0-flash"}
+                  <input
+                    type="text"
+                    value={settings.ai_gemini_model || ""}
                     onChange={(e) => handleSettingChange("ai_gemini_model", e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
-                  >
-                    <option value="gemini-2.0-flash">gemini-2.0-flash (Ultra fast, recommended)</option>
-                    <option value="gemini-1.5-pro">gemini-1.5-pro (Complex reasoning & long context)</option>
-                    <option value="gemini-1.5-flash">gemini-1.5-flash (Standard production)</option>
-                  </select>
+                    placeholder="e.g. gemini-2.0-flash, gemini-2.5-pro, gemini-1.5-pro"
+                    className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+                  />
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {["gemini-2.0-flash", "gemini-2.5-pro", "gemini-1.5-pro", "gemini-1.5-flash"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleSettingChange("ai_gemini_model", m)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                          settings.ai_gemini_model === m
+                            ? "bg-blue-500/10 border-blue-500/30 text-blue-600 font-medium"
+                            : "border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </Card>
@@ -987,17 +1035,31 @@ export function AdminDashboardClient({
 
                 <div>
                   <label className="block text-[11px] font-medium text-[var(--color-muted)] mb-1">
-                    Default OpenAI Model
+                    OpenAI Model ID (Input Form)
                   </label>
-                  <select
-                    value={settings.ai_openai_model || "gpt-4o"}
+                  <input
+                    type="text"
+                    value={settings.ai_openai_model || ""}
                     onChange={(e) => handleSettingChange("ai_openai_model", e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
-                  >
-                    <option value="gpt-4o">gpt-4o (Flagship omni model)</option>
-                    <option value="gpt-4o-mini">gpt-4o-mini (Cost-effective fast tier)</option>
-                    <option value="o1-preview">o1-preview (Deep reasoning)</option>
-                  </select>
+                    placeholder="e.g. gpt-4o, gpt-4o-mini, o1, o3-mini"
+                    className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+                  />
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleSettingChange("ai_openai_model", m)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                          settings.ai_openai_model === m
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 font-medium"
+                            : "border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </Card>
@@ -1014,6 +1076,15 @@ export function AdminDashboardClient({
                     <p className="text-[11px] text-[var(--color-muted)]">Nuanced long-form editorial copy</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  disabled={testingType === "ai-claude"}
+                  onClick={() => runConnectionTest("ai", "claude")}
+                  className="px-2.5 py-1 text-[11px] rounded font-medium border border-amber-200 dark:border-amber-800 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-1"
+                >
+                  <RefreshCw size={11} className={testingType === "ai-claude" ? "animate-spin" : ""} />
+                  {testingType === "ai-claude" ? "Testing..." : "Test Claude"}
+                </button>
               </div>
 
               <div className="space-y-3 text-xs">
@@ -1021,27 +1092,45 @@ export function AdminDashboardClient({
                   <label className="block text-[11px] font-medium text-[var(--color-muted)] mb-1">
                     Anthropic API Key
                   </label>
-                  <input
-                    type="password"
-                    value={settings.ai_claude_api_key || ""}
-                    onChange={(e) => handleSettingChange("ai_claude_api_key", e.target.value)}
-                    placeholder="sk-ant-••••••••••••••••••••"
-                    className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
-                  />
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={settings.ai_claude_api_key || ""}
+                      onChange={(e) => handleSettingChange("ai_claude_api_key", e.target.value)}
+                      placeholder="sk-ant-••••••••••••••••••••"
+                      className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+                    />
+                    <Lock size={12} className="absolute right-3 top-2 text-[var(--color-muted)]" />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-medium text-[var(--color-muted)] mb-1">
-                    Claude Model Version
+                    Claude Model ID (Input Form)
                   </label>
-                  <select
-                    value={settings.ai_claude_model || "claude-3-5-sonnet-20241022"}
+                  <input
+                    type="text"
+                    value={settings.ai_claude_model || ""}
                     onChange={(e) => handleSettingChange("ai_claude_model", e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
-                  >
-                    <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet-20241022</option>
-                    <option value="claude-3-opus-20240229">claude-3-opus-20240229</option>
-                  </select>
+                    placeholder="e.g. claude-3-7-sonnet-20250219, claude-3-5-sonnet-20241022"
+                    className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+                  />
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleSettingChange("ai_claude_model", m)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                          settings.ai_claude_model === m
+                            ? "bg-amber-500/10 border-amber-500/30 text-amber-600 font-medium"
+                            : "border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </Card>
@@ -1058,6 +1147,15 @@ export function AdminDashboardClient({
                     <p className="text-[11px] text-[var(--color-muted)]">Live citation graph & real-time search indexing</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  disabled={testingType === "ai-perplexity"}
+                  onClick={() => runConnectionTest("ai", "perplexity")}
+                  className="px-2.5 py-1 text-[11px] rounded font-medium border border-teal-200 dark:border-teal-800 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 flex items-center gap-1"
+                >
+                  <RefreshCw size={11} className={testingType === "ai-perplexity" ? "animate-spin" : ""} />
+                  {testingType === "ai-perplexity" ? "Testing..." : "Test Perplexity"}
+                </button>
               </div>
 
               <div className="space-y-3 text-xs">
@@ -1065,27 +1163,45 @@ export function AdminDashboardClient({
                   <label className="block text-[11px] font-medium text-[var(--color-muted)] mb-1">
                     Perplexity API Key
                   </label>
-                  <input
-                    type="password"
-                    value={settings.ai_perplexity_api_key || ""}
-                    onChange={(e) => handleSettingChange("ai_perplexity_api_key", e.target.value)}
-                    placeholder="pplx-••••••••••••••••••••"
-                    className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
-                  />
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={settings.ai_perplexity_api_key || ""}
+                      onChange={(e) => handleSettingChange("ai_perplexity_api_key", e.target.value)}
+                      placeholder="pplx-••••••••••••••••••••"
+                      className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+                    />
+                    <Lock size={12} className="absolute right-3 top-2 text-[var(--color-muted)]" />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-medium text-[var(--color-muted)] mb-1">
-                    Perplexity Model Version
+                    Perplexity Model ID (Input Form)
                   </label>
-                  <select
-                    value={settings.ai_perplexity_model || "sonar-pro"}
+                  <input
+                    type="text"
+                    value={settings.ai_perplexity_model || ""}
                     onChange={(e) => handleSettingChange("ai_perplexity_model", e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
-                  >
-                    <option value="sonar-pro">sonar-pro (Deep search with citations)</option>
-                    <option value="sonar">sonar (Fast search grounding)</option>
-                  </select>
+                    placeholder="e.g. sonar-pro, sonar, sonar-reasoning"
+                    className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+                  />
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {["sonar-pro", "sonar", "sonar-reasoning"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleSettingChange("ai_perplexity_model", m)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                          settings.ai_perplexity_model === m
+                            ? "bg-teal-500/10 border-teal-500/30 text-teal-600 font-medium"
+                            : "border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </Card>
@@ -1631,6 +1747,134 @@ export function AdminDashboardClient({
                   </div>
                 </div>
               ))}
+            </div>
+            {/* Plan Comparison Feature Matrix */}
+            <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
+              <h3 className="text-sm font-semibold mb-3">Complete Plan Limits & Feature Matrix</h3>
+              <div className="overflow-x-auto rounded-xl border border-[var(--color-border)]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[var(--color-surface-muted)] text-[var(--color-muted)] border-b border-[var(--color-border)]">
+                    <tr>
+                      <th className="py-2.5 px-3 font-semibold">Feature / Allocation</th>
+                      <th className="py-2.5 px-3 font-semibold text-center w-36">Basic</th>
+                      <th className="py-2.5 px-3 font-semibold text-center w-36 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                        Pro ⭐
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold text-center w-36">Enterprise</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-border)]">
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Monthly Price</td>
+                      <td className="py-2.5 px-3 text-center font-bold text-sm">$29 / mo</td>
+                      <td className="py-2.5 px-3 text-center font-bold text-sm bg-indigo-500/5 text-indigo-600 dark:text-indigo-400">$79 / mo</td>
+                      <td className="py-2.5 px-3 text-center font-bold text-sm">$199 / mo</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Connected Websites</td>
+                      <td className="py-2.5 px-3 text-center font-semibold">1 Website</td>
+                      <td className="py-2.5 px-3 text-center font-semibold bg-indigo-500/5 text-indigo-600 dark:text-indigo-400">5 Websites</td>
+                      <td className="py-2.5 px-3 text-center font-semibold">20 Websites</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Team Users</td>
+                      <td className="py-2.5 px-3 text-center">1 User</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 font-semibold text-indigo-600 dark:text-indigo-400">3 Users</td>
+                      <td className="py-2.5 px-3 text-center font-semibold">10 Users</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Ranked Keywords Monitored</td>
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold">500</td>
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold bg-indigo-500/5 text-indigo-600 dark:text-indigo-400">2,500</td>
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold">10,000</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Search & AI Credits</td>
+                      <td className="py-2.5 px-3 text-center font-mono">5K / mo</td>
+                      <td className="py-2.5 px-3 text-center font-mono bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold">25K / mo</td>
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold">100K / mo</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Autonomous AI Actions</td>
+                      <td className="py-2.5 px-3 text-center font-mono">50</td>
+                      <td className="py-2.5 px-3 text-center font-mono bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold">300</td>
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold">1,000</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">SEO Tools Suite</td>
+                      <td className="py-2.5 px-3 text-center text-[var(--color-muted)]">Basic</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-600 font-semibold">Full Suite</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-600 font-semibold">Full Suite</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">AI Search Visibility Tracker</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500">✅ Included</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Included</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500 font-semibold">✅ Included</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">GEO Agent (Regional Citations)</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-400">❌</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Full Access</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500 font-semibold">✅ Full Access</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">SEO Agent (Audits & Opportunities)</td>
+                      <td className="py-2.5 px-3 text-center text-[var(--color-muted)]">Basic</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-600 font-semibold">Full</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-600 font-semibold">Full</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Article Agent (AI Copywriting)</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-400">❌</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Included</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500 font-semibold">✅ Included</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Reddit Influencer Agent</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-400">❌</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Included</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500 font-semibold">✅ Included</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">X (Twitter) Influencer Agent</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-400">❌</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Included</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500 font-semibold">✅ Included</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">AI Articles Generated</td>
+                      <td className="py-2.5 px-3 text-center font-semibold">2 / mo</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold">20 / mo</td>
+                      <td className="py-2.5 px-3 text-center font-semibold">50 / mo</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Publishing Integrations</td>
+                      <td className="py-2.5 px-3 text-center">1 Target (WordPress)</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Unlimited</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500 font-semibold">✅ Unlimited</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Competitor Monitoring</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-400">❌</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Included</td>
+                      <td className="py-2.5 px-3 text-center font-semibold text-purple-600">Advanced</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Team Management & RBAC</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-400">❌</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-[var(--color-foreground)] font-medium">Basic</td>
+                      <td className="py-2.5 px-3 text-center font-semibold text-purple-600">Advanced</td>
+                    </tr>
+                    <tr className="hover:bg-[var(--color-surface-muted)]/50">
+                      <td className="py-2.5 px-3 font-medium">Support Channel</td>
+                      <td className="py-2.5 px-3 text-center text-[var(--color-muted)]">Standard</td>
+                      <td className="py-2.5 px-3 text-center bg-indigo-500/5 text-emerald-500 font-semibold">✅ Priority 24/7</td>
+                      <td className="py-2.5 px-3 text-center text-emerald-500 font-semibold">✅ Dedicated SLA</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </Card>
 

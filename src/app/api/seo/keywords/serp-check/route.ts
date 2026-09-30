@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { getDefaultWebsite } from "@/server/services/dashboard";
 import { fetchGoogleSerpData } from "@/server/services/google-serp";
+import { getCurrentUser } from "@/server/auth";
+import { deductCredits, CREDIT_COSTS } from "@/server/services/credits";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
@@ -37,6 +39,21 @@ export async function POST(request: Request) {
       { error: { code: "VALIDATION_FAILED", message: "Keyword is required" } },
       { status: 400 },
     );
+  }
+
+  const currentUser = await getCurrentUser();
+  if (currentUser) {
+    const deduction = await deductCredits({
+      userId: currentUser.id,
+      amount: CREDIT_COSTS.KEYWORD_SEARCH,
+      reason: `Live Google SERP check for "${query}" (5 credits)`,
+    });
+    if (!deduction.success) {
+      return NextResponse.json(
+        { error: { code: "INSUFFICIENT_CREDITS", message: deduction.error } },
+        { status: 402 },
+      );
+    }
   }
 
   const country = body.country || "in";

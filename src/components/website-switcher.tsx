@@ -140,11 +140,11 @@ export function WebsiteSwitcher({
               Switch or Manage Websites ({websites.length || 1})
             </p>
             <Link
-              href="/websites"
+              href="/integrations"
               onClick={() => setOpen(false)}
               className="text-[10px] font-medium text-[var(--color-primary)] hover:underline"
             >
-              Manage All
+              All Integrations
             </Link>
           </div>
 

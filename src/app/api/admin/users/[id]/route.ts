@@ -7,7 +7,7 @@ const updateUserSchema = z.object({
   isAdmin: z.boolean().optional(),
   role: z.enum(["ADMIN", "USER"]).optional(),
   name: z.string().min(1).max(120).optional(),
-  plan: z.enum(["STARTER", "PRO", "ENTERPRISE"]).optional(),
+  plan: z.enum(["BASIC", "STARTER", "PRO", "ENTERPRISE"]).optional(),
   status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
   phone: z.string().max(30).nullable().optional(),
 });

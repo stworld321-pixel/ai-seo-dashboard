@@ -23,6 +23,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
+  const [selectedPlan, setSelectedPlan] = useState<"BASIC" | "PRO" | "ENTERPRISE">("BASIC");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function RegisterPage() {
           email: email.trim(),
           password,
           workspaceName: workspaceName.trim() || undefined,
+          plan: selectedPlan,
         }),
       });
 
@@ -305,6 +307,63 @@ export default function RegisterPage() {
                 placeholder="e.g. Acme Marketing or My SEO Workspace"
                 className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-2.5 text-sm text-[var(--color-foreground)] shadow-2xs focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
               />
+            </div>
+
+            {/* Select Subscription Plan */}
+            <div className="space-y-2 pt-1">
+              <label className="block text-xs font-semibold text-[var(--color-foreground)]">
+                Select Your Subscription Plan
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {[
+                  {
+                    id: "BASIC",
+                    name: "Basic",
+                    price: "$29",
+                    desc: "1 Site · 500 Keywords · 5K Credits",
+                  },
+                  {
+                    id: "PRO",
+                    name: "Pro ⭐",
+                    price: "$79",
+                    desc: "5 Sites · 2,500 Keywords · All Agents",
+                    popular: true,
+                  },
+                  {
+                    id: "ENTERPRISE",
+                    name: "Enterprise",
+                    price: "$199",
+                    desc: "20 Sites · 10K Keywords · Agency Scale",
+                  },
+                ].map((plan) => {
+                  const selected = selectedPlan === plan.id;
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setSelectedPlan(plan.id as any)}
+                      className={`relative p-3 text-left rounded-xl border transition-all flex flex-col justify-between ${
+                        selected
+                          ? "border-indigo-600 bg-indigo-500/10 ring-1 ring-indigo-600"
+                          : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-zinc-400"
+                      }`}
+                    >
+                      {plan.popular && (
+                        <span className="absolute -top-2 right-2 text-[9px] font-bold bg-indigo-600 text-white px-1.5 py-0.2 rounded-full">
+                          POPULAR
+                        </span>
+                      )}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[var(--color-foreground)]">{plan.name}</span>
+                          <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">{plan.price}</span>
+                        </div>
+                        <p className="text-[10px] text-[var(--color-muted)] mt-1">{plan.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <button

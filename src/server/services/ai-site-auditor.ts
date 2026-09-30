@@ -1024,45 +1024,19 @@ export async function runFullSiteAiAudit(websiteId: string): Promise<{
     },
   });
 
-  // Seed only high-value core service, product, and blog keywords from crawled content
+  // Seed real search queries using the 11-step Keyword Research pipeline
   const existingKwCount = await prisma.keyword.count({ where: { websiteId } });
   if (existingKwCount === 0) {
-    const { isUtilityOrLegalPage, generateCleanAnchor } = await import("@/server/intelligence/internal-links");
-    const seenKeywords = new Set<string>();
-
-    const seoPages = effectivePages.filter((p) => !isUtilityOrLegalPage(p.url));
-    for (const p of seoPages) {
-      const coreKw = generateCleanAnchor({
-        url: p.url,
-        title: p.title,
-        h1: p.h1,
-        focusKeyword: p.focusKeyword,
-      }).toLowerCase().trim();
-
-      if (
-        coreKw &&
-        coreKw.length >= 4 &&
-        !seenKeywords.has(coreKw) &&
-        !coreKw.includes("privacy") &&
-        !coreKw.includes("terms") &&
-        !coreKw.includes("career")
-      ) {
-        seenKeywords.add(coreKw);
-        await prisma.keyword.upsert({
-          where: { websiteId_query: { websiteId, query: coreKw } },
-          create: {
-            websiteId,
-            query: coreKw,
-            intent: coreKw.includes("service") || coreKw.includes("company") || coreKw.includes("development") ? "COMMERCIAL" : "INFORMATIONAL",
-            bestPage: p.url,
-            opportunityScore: 75,
-            isCustom: true,
-          },
-          update: {
-            bestPage: p.url,
-          },
-        });
-      }
+    try {
+      const { runFullKeywordResearch } = await import("@/server/intelligence/keyword-research");
+      await runFullKeywordResearch({
+        websiteId,
+        country: website.country || "IND",
+        language: "en",
+        maxPagesToCrawl: 25,
+      });
+    } catch {
+      // Non-fatal fallback
     }
   }
 

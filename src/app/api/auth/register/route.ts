@@ -12,6 +12,7 @@ const registerSchema = z.object({
   email: z.string().email("Please enter a valid email address").max(180),
   password: z.string().min(8, "Password must be at least 8 characters").max(128),
   workspaceName: z.string().max(120).optional(),
+  plan: z.enum(["BASIC", "STARTER", "PRO", "ENTERPRISE"]).optional().default("BASIC"),
 });
 
 export async function POST(request: Request) {
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
   const email = parsed.data.email.trim().toLowerCase();
   const password = parsed.data.password;
   const workspaceName = parsed.data.workspaceName?.trim() || `${name}'s Workspace`;
+  const selectedPlan = parsed.data.plan.toUpperCase() === "STARTER" ? "BASIC" : parsed.data.plan.toUpperCase();
+
+  const initialCredits = selectedPlan === "ENTERPRISE" ? 100000 : selectedPlan === "PRO" ? 25000 : 5000;
 
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
@@ -68,7 +72,10 @@ export async function POST(request: Request) {
       passwordHash,
       isAdmin: isFirstUserOrAdmin,
       role: isFirstUserOrAdmin ? "ADMIN" : "USER",
-    },
+      plan: isFirstUserOrAdmin ? "ENTERPRISE" : selectedPlan,
+      creditsRemaining: isFirstUserOrAdmin ? 100000 : initialCredits,
+      creditsTotal: isFirstUserOrAdmin ? 100000 : initialCredits,
+    } as any,
   });
 
   const cleanSlugBase = workspaceName

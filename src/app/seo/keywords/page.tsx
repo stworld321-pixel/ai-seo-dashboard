@@ -6,6 +6,7 @@ import { classifyIntent, positionBand } from "@/server/intelligence/intent";
 import { prisma } from "@/server/db";
 import { KeywordsClientView, type KeywordRow } from "@/components/keywords-client-view";
 import type { GoogleSerpData } from "@/server/services/google-serp";
+import { isStoplistedKeyword, HARD_STOPLIST } from "@/server/intelligence/keyword-research";
 
 export const dynamic = "force-dynamic";
 
@@ -40,21 +41,11 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
     await prisma.gscDaily.deleteMany({ where: { websiteId: website.id } });
   }
 
-  // Clean up any unwanted keywords (privacy, terms, career, cookie, cart, checkout)
+  // Clean up any unwanted or stoplisted keywords
   await prisma.keyword.deleteMany({
     where: {
       websiteId: website.id,
-      OR: [
-        { query: { in: ["learn more", "click here", "products", "page", "read more", "home", "contact"] } },
-        { query: { contains: "privacy" } },
-        { query: { contains: "terms" } },
-        { query: { contains: "career" } },
-        { query: { contains: "cookie" } },
-        { query: { contains: "policy" } },
-        { query: { contains: "cart" } },
-        { query: { contains: "checkout" } },
-        { query: { contains: "uncategorized" } },
-      ],
+      query: { in: Array.from(HARD_STOPLIST) },
     },
   });
 
@@ -67,48 +58,24 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
     prisma.pageRecord.findMany({ where: { websiteId: website.id } }),
   ]);
 
-  // If no monitored keywords exist yet but crawled pages exist, seed core service keywords
+  // If no monitored keywords exist yet but crawled pages exist, run the full Keyword Research pipeline
   if (dbKeywords.length === 0 && pageRecords.length > 0) {
-    const { isUtilityOrLegalPage, generateCleanAnchor } = await import("@/server/intelligence/internal-links");
-    const seenKw = new Set<string>();
+    try {
+      const { runFullKeywordResearch } = await import("@/server/intelligence/keyword-research");
+      await runFullKeywordResearch({
+        websiteId: website.id,
+        country: website.country || "IND",
+        language: "en",
+        maxPagesToCrawl: 20,
+      });
 
-    const corePages = pageRecords.filter((p) => !isUtilityOrLegalPage(p.url));
-    for (const p of corePages) {
-      const coreKw = generateCleanAnchor({
-        url: p.url,
-        title: p.title,
-        h1: p.h1,
-      }).toLowerCase().trim();
-
-      if (
-        coreKw &&
-        coreKw.length >= 4 &&
-        !seenKw.has(coreKw) &&
-        !coreKw.includes("privacy") &&
-        !coreKw.includes("terms") &&
-        !coreKw.includes("career")
-      ) {
-        seenKw.add(coreKw);
-        await prisma.keyword.create({
-          data: {
-            websiteId: website.id,
-            query: coreKw,
-            intent: coreKw.includes("service") || coreKw.includes("company") || coreKw.includes("development") ? "COMMERCIAL" : "INFORMATIONAL",
-            bestPage: p.url,
-            opportunityScore: 80,
-            isCustom: true,
-            clicks28: 0,
-            impressions28: 0,
-            ctr28: 0,
-          },
-        });
-      }
+      dbKeywords = await prisma.keyword.findMany({
+        where: { websiteId: website.id },
+        orderBy: [{ isCustom: "desc" }, { clicks28: "desc" }],
+      });
+    } catch {
+      // non-fatal
     }
-
-    dbKeywords = await prisma.keyword.findMany({
-      where: { websiteId: website.id },
-      orderBy: [{ isCustom: "desc" }, { clicks28: "desc" }],
-    });
   }
 
   const dbMap = new Map(dbKeywords.map((k) => [k.query.toLowerCase(), k]));
@@ -119,15 +86,8 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
 
   for (const q of queries) {
     const norm = q.query.toLowerCase();
-    // Skip unwanted utility queries
-    if (
-      norm.includes("privacy") ||
-      norm.includes("terms") ||
-      norm.includes("career") ||
-      norm.includes("cookie") ||
-      norm.includes("cart") ||
-      norm.includes("checkout")
-    ) {
+    // Skip unwanted utility queries and stoplist words
+    if (isStoplistedKeyword(q.query)) {
       continue;
     }
 
@@ -155,6 +115,8 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
       position28: hasGscConnected ? q.position : null,
       opportunityScore: db?.opportunityScore ?? 0,
       band: positionBand(effectivePos),
+      clusterId: db?.clusterId ?? null,
+      bestPage: db?.bestPage ?? null,
     });
   }
 
@@ -162,12 +124,7 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
   for (const db of dbKeywords) {
     const norm = db.query.toLowerCase();
     if (processedQueries.has(norm)) continue;
-    if (
-      norm.includes("privacy") ||
-      norm.includes("terms") ||
-      norm.includes("career") ||
-      norm.includes("cookie")
-    ) {
+    if (isStoplistedKeyword(db.query)) {
       continue;
     }
 
@@ -193,6 +150,8 @@ export default async function KeywordsPage(props: PageProps<"/seo/keywords">) {
       position28: hasGscConnected ? db.position28 : null,
       opportunityScore: db.opportunityScore,
       band: positionBand(effectivePos),
+      clusterId: db.clusterId ?? null,
+      bestPage: db.bestPage ?? null,
     });
   }
 

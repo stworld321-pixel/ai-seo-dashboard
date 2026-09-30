@@ -167,6 +167,13 @@ export async function getQueryMetrics(
   }
 
   return [...acc.entries()]
+    .filter(([query]) => {
+      const lower = query.toLowerCase().trim();
+      return (
+        lower.length > 2 &&
+        !["services", "service", "our services", "about us", "about", "contact us", "contact", "home", "homepage", "privacy", "terms", "careers", "cart", "checkout", "support", "custom web solutions"].includes(lower)
+      );
+    })
     .map(([query, v]) => ({
       query,
       clicks: v.clicks,

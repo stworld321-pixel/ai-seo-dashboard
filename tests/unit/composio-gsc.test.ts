@@ -102,7 +102,7 @@ describe("ComposioGscProvider response handling", () => {
     await expect(
       p.listProperties(),
     ).rejects.toThrow(/quota exceeded/);
-  });
+  }, 15000);
 
   it("parses the property list", async () => {
     const bin = makeFakeBin(

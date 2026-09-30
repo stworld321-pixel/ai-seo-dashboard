@@ -75,6 +75,9 @@ export type AuthenticatedUser = {
   name: string | null;
   isAdmin: boolean;
   role: string;
+  plan: string;
+  creditsRemaining: number;
+  creditsTotal: number;
   orgId: string | null;
   orgName: string | null;
 };
@@ -89,18 +92,26 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     const dbUser = await prisma.user.findUnique({ where: { id: session.userId } });
     if (!dbUser) return null;
 
-    const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "")
+    const rawUser = dbUser as any;
+    const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
       .toLowerCase()
       .split(",")
       .map((e) => e.trim())
       .filter(Boolean);
 
     const isSystemAdmin =
-      Boolean((dbUser as any).isAdmin) ||
-      (dbUser as any).role === "ADMIN" ||
+      Boolean(rawUser.isAdmin) ||
+      rawUser.role === "ADMIN" ||
       session.isAdmin === true ||
       configuredAdminEmails.includes(dbUser.email.toLowerCase()) ||
-      dbUser.email.toLowerCase().startsWith("admin@");
+      dbUser.email.toLowerCase().startsWith("admin@") ||
+      dbUser.email.toLowerCase() === "suriyamanikandan4@gmail.com";
+
+    const userPlan = rawUser.plan || (isSystemAdmin ? "ENTERPRISE" : "BASIC");
+    const defaultCredits = userPlan === "ENTERPRISE" ? 100000 : userPlan === "PRO" ? 25000 : 5000;
+    const creditsTotal = typeof rawUser.creditsTotal === "number" ? rawUser.creditsTotal : defaultCredits;
+    const creditsRemaining =
+      typeof rawUser.creditsRemaining === "number" ? rawUser.creditsRemaining : creditsTotal;
 
     // Fetch user's active organization membership
     const membership = await prisma.orgMember.findFirst({
@@ -141,7 +152,10 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       email: dbUser.email,
       name: dbUser.name ?? session.name,
       isAdmin: isSystemAdmin,
-      role: isSystemAdmin ? "ADMIN" : ((dbUser as any).role || "USER"),
+      role: isSystemAdmin ? "ADMIN" : (rawUser.role || "USER"),
+      plan: userPlan,
+      creditsRemaining,
+      creditsTotal,
       orgId,
       orgName,
     };

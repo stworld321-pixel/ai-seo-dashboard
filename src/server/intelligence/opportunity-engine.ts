@@ -338,16 +338,29 @@ function assignPriorities(items: Opportunity[]): Opportunity[] {
 }
 
 export function runOpportunityEngine(input: EngineInput): EngineResult {
-  const curve = fitCtrCurve(input.queries);
+  const isStopword = (q?: string) => {
+    if (!q) return false;
+    const lower = q.toLowerCase().trim();
+    return ["services", "service", "our services", "about us", "about", "contact us", "contact", "home", "homepage", "privacy", "terms", "careers", "cart", "checkout", "support", "custom web solutions"].includes(lower);
+  };
+
+  const cleanInput: EngineInput = {
+    ...input,
+    queries: input.queries.filter((q) => !isStopword(q.query)),
+    queryPages: input.queryPages?.filter((q) => !isStopword(q.query)),
+    previousQueries: input.previousQueries?.filter((q) => !isStopword(q.query)),
+  };
+
+  const curve = fitCtrCurve(cleanInput.queries);
 
   const all = [
-    ...quickWins(input, curve),
-    ...pageTwo(input, curve),
-    ...ctrGaps(input, curve),
-    ...decliningKeywords(input),
-    ...decliningPages(input),
-    ...detectCannibalization(input.queryPages ?? input.queries),
-  ];
+    ...quickWins(cleanInput, curve),
+    ...pageTwo(cleanInput, curve),
+    ...ctrGaps(cleanInput, curve),
+    ...decliningKeywords(cleanInput),
+    ...decliningPages(cleanInput),
+    ...detectCannibalization(cleanInput.queryPages ?? cleanInput.queries),
+  ].filter((o) => !isStopword(o.keyword));
 
   const ranked = assignPriorities(all).sort((a, b) => b.score - a.score);
   return { opportunities: ranked, curve };
