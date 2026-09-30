@@ -24,6 +24,7 @@ const SECRET_KEYS = new Set([
   "ai_openai_api_key",
   "ai_claude_api_key",
   "ai_perplexity_api_key",
+  "dataforseo_api_key",
   "reddit_client_secret",
   "x_client_secret",
   "x_api_secret",
@@ -61,6 +62,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, { value: string; category: 
   ai_claude_api_key: { value: "", category: "ai_models" },
   ai_perplexity_model: { value: "sonar-pro", category: "ai_models" },
   ai_perplexity_api_key: { value: "", category: "ai_models" },
+  dataforseo_api_key: { value: process.env.DATAFORSEO_API_KEY || "c3VwcG9ydEBzb2NpYWxzeW5jYm90LmluOjRkYTVkZTkxNzVkYjQyYTA=", category: "ai_models" },
 
   // 2. Developer Connect (Reddit & X)
   reddit_client_id: { value: process.env.REDDIT_CLIENT_ID || "", category: "developer_connect" },

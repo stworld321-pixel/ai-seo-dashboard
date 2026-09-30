@@ -1,6 +1,7 @@
 import https from "node:https";
 import { classifyIntent } from "@/server/intelligence/intent";
 import { decodeHtmlEntities } from "@/server/services/ai-site-auditor";
+import { fetchDataForSeoAiOverviewAndSerp } from "@/server/integrations/search/dataforseo";
 
 export interface SerpResultItem {
   position: number; // 1..100
@@ -52,6 +53,82 @@ export interface GoogleSerpData {
   difficultyEstimate: number; // 0..100
   opportunityScore: number; // 0..100
   topCompetitors: string[];
+  aiOverview?: {
+    found: boolean;
+    markdown?: string;
+    references: Array<{ url: string; domain: string; title: string; text?: string }>;
+  };
+}
+
+/**
+ * Strategy 0: DataForSEO Google Live SERP & Real AI Overview Citations
+ */
+async function fetchViaDataForSeo(
+  keyword: string,
+  targetDomain: string,
+  country = "in",
+): Promise<{
+  organicResults: SerpResultItem[];
+  foundRank: number | null;
+  foundPage: number | null;
+  foundUrl: string | null;
+  pagesChecked: number;
+  totalResultsChecked: number;
+  peopleAlsoAsk?: Array<{ question: string; snippet?: string }>;
+  relatedSearches?: string[];
+  aiOverview?: {
+    found: boolean;
+    markdown?: string;
+    references: Array<{ url: string; domain: string; title: string; text?: string }>;
+  };
+} | null> {
+  try {
+    const data = await fetchDataForSeoAiOverviewAndSerp(keyword, { countryCode: country });
+    if (!data || !data.organic || data.organic.length === 0) return null;
+
+    const normTarget = extractDomain(targetDomain);
+    const organicResults: SerpResultItem[] = [];
+    let foundRank: number | null = null;
+    let foundPage: number | null = null;
+    let foundUrl: string | null = null;
+
+    data.organic.forEach((item, idx) => {
+      const pos = item.rank || idx + 1;
+      const page = Math.ceil(pos / 10);
+      const domain = item.domain || extractDomain(item.url);
+      const isTarget = Boolean(normTarget && (domain === normTarget || domain.endsWith(`.${normTarget}`)));
+
+      if (isTarget && !foundRank) {
+        foundRank = pos;
+        foundPage = page;
+        foundUrl = item.url;
+      }
+
+      organicResults.push({
+        position: pos,
+        page,
+        title: item.title || "Google Search Result",
+        url: item.url,
+        domain,
+        snippet: item.snippet || "",
+        isTargetDomain: isTarget,
+      });
+    });
+
+    return {
+      organicResults,
+      foundRank,
+      foundPage,
+      foundUrl,
+      pagesChecked: Math.ceil(organicResults.length / 10),
+      totalResultsChecked: organicResults.length,
+      peopleAlsoAsk: data.peopleAlsoAsk,
+      relatedSearches: data.relatedSearches,
+      aiOverview: data.aiOverview,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -463,21 +540,46 @@ export async function fetchGoogleSerpData({
   let provider = "Google Live Intelligence";
   let peopleAlsoAsk = generateGooglePAA(keyword);
 
-  // 1. Try Serper API (Live 1:1 Google SERP for First 10 Pages)
-  const serperRes = await fetchViaSerper(keyword, targetDomain, targetCountry, pagesToCheck);
-  if (serperRes && serperRes.organicResults.length > 0) {
-    organicResults = serperRes.organicResults;
-    foundRank = serperRes.foundRank;
-    foundPage = serperRes.foundPage;
-    foundUrl = serperRes.foundUrl;
-    pagesChecked = serperRes.pagesChecked;
-    totalResultsChecked = serperRes.totalResultsChecked;
-    provider = "Google Live SERP (Serper API)";
-    if (serperRes.peopleAlsoAsk && serperRes.peopleAlsoAsk.length > 0) {
-      peopleAlsoAsk = serperRes.peopleAlsoAsk as any;
+  let aiOverviewData: any = undefined;
+
+  // 0. Try DataForSEO (Live Google SERP + AI Overview Citations)
+  const dataForSeoRes = await fetchViaDataForSeo(keyword, targetDomain, targetCountry);
+  if (dataForSeoRes && dataForSeoRes.organicResults.length > 0) {
+    organicResults = dataForSeoRes.organicResults;
+    foundRank = dataForSeoRes.foundRank;
+    foundPage = dataForSeoRes.foundPage;
+    foundUrl = dataForSeoRes.foundUrl;
+    pagesChecked = dataForSeoRes.pagesChecked;
+    totalResultsChecked = dataForSeoRes.totalResultsChecked;
+    provider = "DataForSEO Live SERP & AI Citations";
+    if (dataForSeoRes.peopleAlsoAsk && dataForSeoRes.peopleAlsoAsk.length > 0) {
+      peopleAlsoAsk = dataForSeoRes.peopleAlsoAsk as any;
     }
-    if (serperRes.relatedSearches && serperRes.relatedSearches.length > 0) {
-      relatedSearches.splice(0, relatedSearches.length, ...serperRes.relatedSearches);
+    if (dataForSeoRes.relatedSearches && dataForSeoRes.relatedSearches.length > 0) {
+      relatedSearches.splice(0, relatedSearches.length, ...dataForSeoRes.relatedSearches);
+    }
+    if (dataForSeoRes.aiOverview) {
+      aiOverviewData = dataForSeoRes.aiOverview;
+    }
+  }
+
+  // 1. Try Serper API (Live 1:1 Google SERP for First 10 Pages)
+  if (organicResults.length === 0) {
+    const serperRes = await fetchViaSerper(keyword, targetDomain, targetCountry, pagesToCheck);
+    if (serperRes && serperRes.organicResults.length > 0) {
+      organicResults = serperRes.organicResults;
+      foundRank = serperRes.foundRank;
+      foundPage = serperRes.foundPage;
+      foundUrl = serperRes.foundUrl;
+      pagesChecked = serperRes.pagesChecked;
+      totalResultsChecked = serperRes.totalResultsChecked;
+      provider = "Google Live SERP (Serper API)";
+      if (serperRes.peopleAlsoAsk && serperRes.peopleAlsoAsk.length > 0) {
+        peopleAlsoAsk = serperRes.peopleAlsoAsk as any;
+      }
+      if (serperRes.relatedSearches && serperRes.relatedSearches.length > 0) {
+        relatedSearches.splice(0, relatedSearches.length, ...serperRes.relatedSearches);
+      }
     }
   }
 
@@ -570,5 +672,6 @@ export async function fetchGoogleSerpData({
     difficultyEstimate,
     opportunityScore: Math.max(15, Math.min(100, opportunityScore)),
     topCompetitors,
+    aiOverview: aiOverviewData,
   };
 }

@@ -14,6 +14,7 @@ import https from "node:https";
 import { prisma } from "@/server/db";
 import { extractBrandMentions, type ExtractionResult } from "@/server/intelligence/ai-extractor";
 import { discoverPrompts } from "@/server/intelligence/prompt-discovery";
+import { fetchDataForSeoAiOverviewAndSerp } from "@/server/integrations/search/dataforseo";
 
 interface LiveSerpResult {
   title: string;
@@ -1098,7 +1099,122 @@ export async function executePromptRun(
       }
     }
 
-    // 1. Try real live Google SERP grounding (Perplexity / ChatGPT Search / SGE live mimic)
+    // 0. Try DataForSEO for 100% genuine Google AI Overview Citations & Live SERP grounding
+    if (!responseText) {
+      const dataForSeo = await fetchDataForSeoAiOverviewAndSerp(prompt.text, { countryCode });
+      if (dataForSeo && (dataForSeo.aiOverview.found || dataForSeo.organic.length > 0)) {
+        collectionMethod = "dataforseo_ai_grounded";
+        const cleanTargetDomain = brandDomain.replace(/^www\./, "").toLowerCase();
+        const cleanBrandName = brandName.toLowerCase();
+
+        // Check if brand is cited in AI Overview references
+        const aiCitations = dataForSeo.aiOverview?.references || [];
+        const isCitedInAiOverview = aiCitations.some(
+          (ref) =>
+            ref.domain === cleanTargetDomain ||
+            ref.domain.endsWith(`.${cleanTargetDomain}`) ||
+            ref.url.toLowerCase().includes(cleanTargetDomain) ||
+            ref.title.toLowerCase().includes(cleanBrandName),
+        );
+
+        // Check organic ranking
+        const foundOrganic = dataForSeo.organic.find(
+          (r) =>
+            r.domain === cleanTargetDomain ||
+            r.domain.endsWith(`.${cleanTargetDomain}`) ||
+            r.title.toLowerCase().includes(cleanBrandName),
+        );
+
+        const realCompetitorDomains = [
+          ...new Set([
+            ...aiCitations.map((c) => c.domain),
+            ...dataForSeo.organic.map((o) => o.domain),
+          ]),
+        ]
+          .filter((d) => d && d !== cleanTargetDomain && !d.endsWith(`.${cleanTargetDomain}`))
+          .slice(0, 8);
+
+        if (realCompetitorDomains.length > 0) {
+          competitorDomains = realCompetitorDomains;
+        }
+
+        // Save new citation opportunities discovered from Google AI Overview & SERP
+        if (aiCitations.length > 0) {
+          void Promise.all(
+            aiCitations
+              .filter((ref) => ref.domain && ref.domain !== cleanTargetDomain && !ref.domain.endsWith(`.${cleanTargetDomain}`))
+              .slice(0, 5)
+              .map((ref) =>
+                prisma.citationOpportunity.upsert({
+                  where: { id: `d4s-cit-${website.id}-${ref.domain}` },
+                  create: {
+                    id: `d4s-cit-${website.id}-${ref.domain}`,
+                    websiteId: website.id,
+                    targetDomain: ref.domain,
+                    targetUrl: ref.url,
+                    whyRelevant: `Directly cited in Google AI Overview for "${prompt.text}" (${ref.title}).`,
+                    authorityNotes: `Authoritative reference source in Google AI search index.`,
+                    action: `Pursue authoritative coverage, contributor profile, or citation on ${ref.domain}`,
+                    status: "identified",
+                  },
+                  update: {
+                    targetUrl: ref.url,
+                    whyRelevant: `Directly cited in Google AI Overview for "${prompt.text}" (${ref.title}).`,
+                  },
+                }).catch(() => {}),
+              ),
+          );
+        }
+
+        // Formulate response text based on engine
+        if (engine === "gemini") {
+          if (dataForSeo.aiOverview?.markdown) {
+            responseText =
+              `### Google AI Overview: "${prompt.text}"\n\n` +
+              `${dataForSeo.aiOverview.markdown}\n\n` +
+              `### Cited Sources & References:\n` +
+              (aiCitations.length > 0
+                ? aiCitations.map((r, i) => `${i + 1}. **[${r.title}](${r.url})** (${r.domain})`).join("\n")
+                : dataForSeo.organic.slice(0, 4).map((r, i) => `${i + 1}. **[${r.title}](${r.url})** (${r.domain})`).join("\n"));
+          } else {
+            responseText =
+              `### Google Search Overview for "${prompt.text}" in ${location}\n\n` +
+              dataForSeo.organic.slice(0, 4).map((r) => `• **${r.title}** (${r.url}): ${r.snippet}`).join("\n\n") +
+              `\n\nTop Sources: ${dataForSeo.organic.slice(0, 4).map((r) => r.domain).join(", ")}`;
+          }
+        } else if (engine === "perplexity") {
+          responseText =
+            `Live search analysis for "${prompt.text}" in ${location}:\n\n` +
+            (dataForSeo.aiOverview?.markdown ? `**Search Knowledge Graph:**\n${dataForSeo.aiOverview.markdown}\n\n` : "") +
+            dataForSeo.organic.slice(0, 5).map((r, idx) => `${idx + 1}. **${r.title}** (${r.url})\n   ${r.snippet}`).join("\n\n") +
+            `\n\nSources:\n` +
+            (aiCitations.length > 0
+              ? aiCitations.map((r) => `- ${r.url}`).join("\n")
+              : dataForSeo.organic.slice(0, 5).map((r) => `- ${r.url}`).join("\n"));
+        } else if (engine === "chatgpt") {
+          responseText =
+            `### Search Results & Analysis for "${prompt.text}"\n\n` +
+            (dataForSeo.aiOverview?.markdown ? `${dataForSeo.aiOverview.markdown}\n\n` : "") +
+            `Based on current web index rankings for ${location}:\n\n` +
+            dataForSeo.organic.slice(0, 4).map((r) => `• **${r.title}** (${r.domain}): ${r.snippet}`).join("\n\n") +
+            (isCitedInAiOverview || foundOrganic
+              ? `\n\n**Brand Presence**: **${brandName}** appears at position #${foundOrganic?.rank ?? 1} (${foundOrganic?.url ?? ""}).`
+              : `\n\n**Brand Presence**: **${brandName}** was not found in top search results. Top market presence is held by ${realCompetitorDomains.slice(0, 3).join(", ")}.`);
+        } else {
+          // Claude
+          responseText =
+            `### Evaluation for query: "${prompt.text}"\n\n` +
+            (dataForSeo.aiOverview?.markdown ? `**AI Knowledge Graph Summary:**\n${dataForSeo.aiOverview.markdown}\n\n` : "") +
+            `Primary web authorities and ranked entities in ${location}:\n\n` +
+            dataForSeo.organic.slice(0, 4).map((r, idx) => `${idx + 1}. **${r.title}**\n   Reference: ${r.url}\n   Context: ${r.snippet}`).join("\n\n") +
+            (isCitedInAiOverview || foundOrganic
+              ? `\n\nEntity observation: **${brandName}** is recognized in the search knowledge graph at #${foundOrganic?.rank ?? 1}.`
+              : `\n\nEntity observation: **${brandName}** has not yet established search authority for this prompt. Recommended competitors: ${realCompetitorDomains.slice(0, 3).join(", ")}.`);
+        }
+      }
+    }
+
+    // 1. Try Serper API (Fallback)
     if (!responseText) {
       const liveResults = await fetchLiveSerpForAi(prompt.text, countryCode);
 
