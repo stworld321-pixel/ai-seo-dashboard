@@ -33,13 +33,13 @@ async function diagnose() {
       orderBy: { date: 'asc' }
     });
     console.log(`\nDaily Rows (${dailyRows.length} total):`);
-    dailyRows.forEach(r => {
+    dailyRows.forEach((r: any) => {
       console.log(`  ${r.date.toISOString().slice(0, 10)}: Clicks=${r.clicks}, Impr=${r.impressions}, CTR=${(r.ctr*100).toFixed(1)}%, Pos=${r.position.toFixed(1)}`);
     });
 
-    const totalClicks = dailyRows.reduce((a, b) => a + b.clicks, 0);
-    const totalImpr = dailyRows.reduce((a, b) => a + b.impressions, 0);
-    const avgPos = totalImpr > 0 ? (dailyRows.reduce((a, b) => a + b.position * b.impressions, 0) / totalImpr) : 0;
+    const totalClicks = dailyRows.reduce((a: number, b: any) => a + b.clicks, 0);
+    const totalImpr = dailyRows.reduce((a: number, b: any) => a + b.impressions, 0);
+    const avgPos = totalImpr > 0 ? (dailyRows.reduce((a: number, b: any) => a + b.position * b.impressions, 0) / totalImpr) : 0;
     const avgCtr = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0;
     console.log(`\nSUM in DB: Clicks=${totalClicks}, Impr=${totalImpr}, CTR=${avgCtr.toFixed(2)}%, AvgPos=${avgPos.toFixed(1)}`);
   }

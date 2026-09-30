@@ -42,11 +42,11 @@ export default async function AdminPage() {
     getSystemSettings({ unmaskSecrets: false }),
   ]);
 
-  const userItems: AdminUserItem[] = users.map((u) => {
-    const userMemberships = memberships.filter((m) => m.userId === u.id);
-    const orgIds = userMemberships.map((m) => m.orgId);
-    const orgs = organizations.filter((o) => orgIds.includes(o.id));
-    const userWebsites = websites.filter((w) => orgIds.includes(w.orgId));
+  const userItems: AdminUserItem[] = users.map((u: any) => {
+    const userMemberships = memberships.filter((m: any) => m.userId === u.id);
+    const orgIds = userMemberships.map((m: any) => m.orgId);
+    const orgs = organizations.filter((o: any) => orgIds.includes(o.id));
+    const userWebsites = websites.filter((w: any) => orgIds.includes(w.orgId));
 
     const rawUser = u as any;
 
@@ -60,16 +60,16 @@ export default async function AdminPage() {
       status: rawUser.status || "ACTIVE",
       phone: rawUser.phone || null,
       createdAt: u.createdAt.toISOString(),
-      organizations: orgs.map((o) => ({ id: o.id, name: o.name, slug: o.slug })),
+      organizations: orgs.map((o: any) => ({ id: o.id, name: o.name, slug: o.slug })),
       websiteCount: userWebsites.length,
-      websites: userWebsites.map((w) => ({ id: w.id, name: w.name, url: w.url })),
+      websites: userWebsites.map((w: any) => ({ id: w.id, name: w.name, url: w.url })),
     };
   });
 
-  const websiteItems: AdminWebsiteItem[] = websites.map((w) => {
-    const org = organizations.find((o) => o.id === w.orgId);
-    const membership = memberships.find((m) => m.orgId === w.orgId);
-    const owner = membership ? users.find((u) => u.id === membership.userId) : null;
+  const websiteItems: AdminWebsiteItem[] = websites.map((w: any) => {
+    const org = organizations.find((o: any) => o.id === w.orgId);
+    const membership = memberships.find((m: any) => m.orgId === w.orgId);
+    const owner = membership ? users.find((u: any) => u.id === membership.userId) : null;
 
     return {
       id: w.id,
