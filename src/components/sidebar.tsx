@@ -92,7 +92,6 @@ const GROUPS: Group[] = [
     label: "Integrations",
     items: [
       { href: "/integrations", label: "All Integrations", icon: Layers },
-      { href: "/integrations/publishing", label: "Publishing & Deployment", icon: Wrench },
       { href: "/automation/activity", label: "Activity Log", icon: Activity },
     ],
   },
