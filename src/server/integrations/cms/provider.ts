@@ -25,6 +25,8 @@ export type CmsItem = {
   metaDescription: string | null;
   focusKeyword: string | null;
   content?: string;
+  /** WooCommerce short description / post excerpt (HTML). */
+  excerpt?: string;
   modifiedAt: string;
 };
 
@@ -43,4 +45,9 @@ export interface CmsProvider {
   getByUrl(url: string): Promise<CmsItem | null>;
   /** Updates SEO fields only. Content edits are a separate, gated operation. */
   updateSeoMeta(id: string, patch: SeoMetaPatch): Promise<void>;
+  /**
+   * Replaces the short description / excerpt. Separate from updateSeoMeta
+   * because it changes customer-visible page copy, not just search metadata.
+   */
+  updateExcerpt(id: string, type: string, html: string): Promise<void>;
 }
