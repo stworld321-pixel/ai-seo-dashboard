@@ -50,14 +50,11 @@ async function ensureSeeded() {
 }
 
 function createUnderlyingClient(): PrismaClient | null {
-  // Always use the persistent local JSON store (.data/seo-db.json) when local PGlite is used
-  // so there is no schema mismatch (e.g. Website.technology) or split-brain state across restarts.
   const connectionString = process.env.DATABASE_URL;
   if (
     !connectionString ||
     connectionString.includes("user:pass@host") ||
-    connectionString.includes("localhost:51214") ||
-    !isLocalStoreEmpty()
+    connectionString.includes("localhost:51214")
   ) {
     globalThis.__pgOffline = true;
     return null;
@@ -65,9 +62,9 @@ function createUnderlyingClient(): PrismaClient | null {
   try {
     const adapter = new PrismaPg({
       connectionString,
-      max: 1,
-      idleTimeoutMillis: 1000,
-      connectionTimeoutMillis: 1500,
+      max: 5,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
     });
     return new PrismaClient({
       adapter,

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 
 /**
@@ -8,11 +9,15 @@ import crypto from "node:crypto";
  * stopped or Neon credentials are not yet configured).
  *
  * Implements the Prisma model interface used across services, scripts, and pages,
- * and persists state to `.data/seo-db.json`.
+ * and persists state to `.data/seo-db.json` (or `/tmp/seo-data/seo-db.json` on Vercel).
  */
 
-const DATA_DIR = path.resolve(process.cwd(), ".data");
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless
+  ? path.join(os.tmpdir(), "seo-data")
+  : path.resolve(process.cwd(), ".data");
 const DB_FILE = path.join(DATA_DIR, "seo-db.json");
+const BUNDLED_DB_FILE = path.resolve(process.cwd(), ".data", "seo-db.json");
 
 const DATE_FIELDS = new Set([
   "date",
@@ -137,12 +142,18 @@ let memoryStoreMtimeMs = 0;
 
 function loadStore(): StoreData {
   try {
-    if (fs.existsSync(DB_FILE)) {
-      const stat = fs.statSync(DB_FILE);
+    const fileToRead = fs.existsSync(DB_FILE)
+      ? DB_FILE
+      : fs.existsSync(BUNDLED_DB_FILE)
+        ? BUNDLED_DB_FILE
+        : null;
+
+    if (fileToRead) {
+      const stat = fs.statSync(fileToRead);
       if (memoryStore && stat.mtimeMs === memoryStoreMtimeMs) {
         return memoryStore;
       }
-      const raw = JSON.parse(fs.readFileSync(DB_FILE, "utf8")) as StoreData;
+      const raw = JSON.parse(fs.readFileSync(fileToRead, "utf8")) as StoreData;
       const s = emptyStore();
       for (const m of MODEL_NAMES) {
         s[m] = (raw[m] ?? []).map(reviveDates);

@@ -158,9 +158,18 @@ export function OnboardingWizard() {
         }),
       });
 
-      const createData = (await createRes.json()) as { data?: { id: string } };
+      const createData = (await createRes.json().catch(() => ({}))) as {
+        data?: { id: string };
+        error?: { message?: string };
+        message?: string;
+      };
+
       if (!createRes.ok || !createData.data?.id) {
-        setStep1Error("Failed to save website. Please check the domain and try again.");
+        const errorMsg =
+          createData.error?.message ||
+          createData.message ||
+          "Failed to save website. Please check the domain and try again.";
+        setStep1Error(errorMsg);
         return;
       }
 
