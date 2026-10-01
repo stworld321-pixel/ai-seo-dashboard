@@ -33,6 +33,9 @@ model User {
   plan         String   @default("STARTER")
   status       String   @default("ACTIVE")
   phone        String?
+  // Written by the register route and read by src/server/services/credits.ts.
+  creditsRemaining Int  @default(5000)
+  creditsTotal     Int  @default(5000)
   createdAt    DateTime @default(now())
 
   memberships OrgMember[]

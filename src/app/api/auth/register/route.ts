@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       plan: isConfiguredAdmin ? "ENTERPRISE" : selectedPlan,
       creditsRemaining: isConfiguredAdmin ? 100000 : initialCredits,
       creditsTotal: isConfiguredAdmin ? 100000 : initialCredits,
-    } as any,
+    },
   });
 
   const cleanSlugBase = workspaceName
