@@ -70,7 +70,6 @@ export function proxy(request: NextRequest) {
       Boolean(session.isAdmin) ||
       session.role === "ADMIN" ||
       configuredAdminEmails.includes(userEmail) ||
-      userEmail.startsWith("admin@") ||
       userEmail === "suriyamanikandan4@gmail.com";
 
     if (!isUserAdmin) {

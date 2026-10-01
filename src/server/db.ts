@@ -37,16 +37,8 @@ function isConnectionError(err: unknown): boolean {
 
 let isSeeding = false;
 async function ensureSeeded() {
-  if (isSeeding || !isLocalStoreEmpty()) return;
-  isSeeding = true;
-  try {
-    const { seedDatabase } = await import("../../prisma/seed");
-    await seedDatabase();
-  } catch (err) {
-    console.warn("Auto-seed warning:", err);
-  } finally {
-    isSeeding = false;
-  }
+  // Do not auto-seed demo data so workspaces start clean
+  return;
 }
 
 function createUnderlyingClient(): PrismaClient | null {

@@ -341,16 +341,7 @@ export async function getDefaultWebsite(websiteId?: string) {
     if (userSite) return userSite;
   }
 
-  // 2. If logged in as regular user and has no website in their org, return null (never leak another user's project!)
-  if (currentUserId && !isUserAdmin) {
-    return null;
-  }
-
-  // 3. If user is system admin or outside HTTP context, fallback to newest global website
-  if (isUserAdmin || !currentUserId) {
-    return prisma.website.findFirst({ orderBy: { createdAt: "desc" } });
-  }
-
+  // 2. If the user has no website in their organization, return null so they see the clean Onboarding wizard
   return null;
 }
 
