@@ -85,6 +85,9 @@ export function WebsiteSwitcher({
 
   async function handleRemoveWebsite(e: React.MouseEvent, site: WebsiteOption) {
     e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to remove "${site.name}" (${site.url})?\n\nThis will permanently delete this website project and its data.`)) {
+      return;
+    }
     setBusyId(site.id);
     try {
       const res = await fetch(`/api/websites/${encodeURIComponent(site.id)}`, { method: "DELETE" });
@@ -205,13 +208,21 @@ export function WebsiteSwitcher({
             )}
           </div>
 
-          <div className="mt-1 border-t border-[var(--color-border)] pt-1">
+          <div className="mt-1 border-t border-[var(--color-border)] pt-1 space-y-0.5">
             <Link
               href="/onboarding"
               onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-surface-muted)] rounded-lg transition-colors"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-surface-muted)] rounded-lg transition-colors"
             >
               <Plus size={14} /> Add New Website
+            </Link>
+            <Link
+              href="/websites"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] rounded-lg transition-colors"
+            >
+              <span>Manage &amp; Delete Websites</span>
+              <span className="text-[10px] text-[var(--color-primary)]">View All →</span>
             </Link>
           </div>
         </div>

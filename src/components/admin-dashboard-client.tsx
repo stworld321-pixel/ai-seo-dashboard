@@ -28,6 +28,8 @@ import {
   Share2,
   Lock,
   Zap,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { Card } from "@/components/card";
 import type { SystemSettingItem } from "@/server/services/system-settings";
@@ -95,7 +97,7 @@ const VALID_TABS = new Set<TabType>([
 
 export function AdminDashboardClient({
   users: initialUsers,
-  websites,
+  websites: initialWebsites,
   stats,
   initialSettings,
   currentAdminEmail,
@@ -130,6 +132,8 @@ export function AdminDashboardClient({
   }
 
   const [users, setUsers] = useState<AdminUserItem[]>(initialUsers);
+  const [websites, setWebsites] = useState<AdminWebsiteItem[]>(initialWebsites);
+  const [deletingWebsiteId, setDeletingWebsiteId] = useState<string | null>(null);
   const [settings, setSettings] = useState<Record<string, string>>(() => {
     const s: Record<string, string> = {};
     for (const [k, v] of Object.entries(initialSettings)) {
@@ -235,6 +239,33 @@ export function AdminDashboardClient({
       alert(err?.message || "Error updating user");
     } finally {
       setUpdatingUserId(null);
+    }
+  }
+
+  // Handle website deletion
+  async function handleDeleteWebsite(siteId: string, siteName: string) {
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete "${siteName}" and all associated crawled data, keywords, opportunities, and logs? This action cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingWebsiteId(siteId);
+    try {
+      const res = await fetch(`/api/websites/${siteId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setWebsites((prev) => prev.filter((w) => w.id !== siteId));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data?.error?.message || "Failed to delete website");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Error deleting website");
+    } finally {
+      setDeletingWebsiteId(null);
     }
   }
 
@@ -2072,7 +2103,7 @@ export function AdminDashboardClient({
                   <th className="py-2.5 px-3 font-semibold">CMS Engine</th>
                   <th className="py-2.5 px-3 font-semibold">GSC Property</th>
                   <th className="py-2.5 px-3 font-semibold">Automation</th>
-                  <th className="py-2.5 px-3 font-semibold text-right">Launch</th>
+                  <th className="py-2.5 px-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
@@ -2107,12 +2138,27 @@ export function AdminDashboardClient({
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <Link
-                        href={`/?website=${encodeURIComponent(w.id)}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded font-medium bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors"
-                      >
-                        Open Dashboard <ArrowUpRight size={11} />
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/?website=${encodeURIComponent(w.id)}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded font-medium bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors"
+                        >
+                          Open <ArrowUpRight size={11} />
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={deletingWebsiteId === w.id}
+                          onClick={() => handleDeleteWebsite(w.id, w.name || w.url)}
+                          title={`Delete ${w.name || w.url}`}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors disabled:opacity-50"
+                        >
+                          {deletingWebsiteId === w.id ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={13} />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

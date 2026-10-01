@@ -31,21 +31,34 @@ export async function DELETE(
     }
   }
 
-  const result = purgeWebsiteFromLocalStore(id, website.orgId);
-  if (!result.deleted) {
-    return NextResponse.json({ error: { message: "Website not found" } }, { status: 404 });
+  // 1. Delete from PostgreSQL database (with Prisma cascade on child records)
+  try {
+    await prisma.website.delete({ where: { id } }).catch(() => {});
+  } catch {
+    // ignore
   }
+
+  // 2. Also purge from local resilient store
+  const result = purgeWebsiteFromLocalStore(id, website.orgId);
+
+  // Find next website in the organization
+  const nextSite = await prisma.website.findFirst({
+    where: { orgId: website.orgId, id: { not: id } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const nextId = nextSite?.id || result.nextWebsiteId || null;
 
   const response = NextResponse.json({
     data: {
       deletedId: id,
-      deletedName: result.deletedName,
-      nextWebsiteId: result.nextWebsiteId,
+      deletedName: website.name || result.deletedName,
+      nextWebsiteId: nextId,
     },
   });
 
-  if (result.nextWebsiteId) {
-    response.cookies.set("active_website_id", result.nextWebsiteId, {
+  if (nextId) {
+    response.cookies.set("active_website_id", nextId, {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
       sameSite: "lax",

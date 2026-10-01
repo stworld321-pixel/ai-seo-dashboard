@@ -36,6 +36,9 @@ export function WebsiteCardActions({
   }
 
   async function handleRemove() {
+    if (!window.confirm(`Are you sure you want to remove "${websiteName}" (${websiteUrl})?\n\nThis will permanently delete this website project, Search Console links, crawled pages, and AI audit history.`)) {
+      return;
+    }
     setDeleting(true);
     try {
       const res = await fetch(`/api/websites/${encodeURIComponent(websiteId)}`, {
@@ -53,7 +56,11 @@ export function WebsiteCardActions({
           document.cookie = "active_website_id=; path=/; max-age=0";
         }
         router.refresh();
+      } else {
+        alert("Failed to remove website. Please check permissions and try again.");
       }
+    } catch {
+      alert("Error removing website.");
     } finally {
       setDeleting(false);
     }

@@ -53,6 +53,7 @@ const GROUPS: Group[] = [
   {
     label: "Websites",
     items: [
+      { href: "/websites", label: "Manage Websites", icon: Globe },
       { href: "/onboarding", label: "Add Website", icon: Sparkles },
       { href: "/settings", label: "Website Settings", icon: Settings },
     ],

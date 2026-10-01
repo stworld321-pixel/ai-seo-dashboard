@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader } from "@/components/card";
 import { StatusBadge } from "@/components/badges";
+import { Trash2, AlertTriangle, Loader2 } from "lucide-react";
 import type {
   AiProviderId,
   ConfiguredAiModel,
@@ -100,6 +101,7 @@ export function SettingsClient({
   const [wpAppPassword, setWpAppPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [deletingSite, setDeletingSite] = useState(false);
 
   // AI Model Configuration State
   const [aiModels, setAiModels] = useState<ConfiguredAiModel[]>(initialAiModels);
@@ -642,6 +644,71 @@ export function SettingsClient({
           </div>
         </Card>
       </form>
+
+      {/* Danger Zone: Delete Website */}
+      <Card className="mt-8 border border-red-500/30 bg-red-500/5">
+        <CardHeader
+          title="Danger Zone — Remove Website Project"
+          subtitle={`Permanently delete ${website.name} (${website.url}) and all associated SEO tracking`}
+        />
+        <div className="space-y-4 p-5 pt-0">
+          <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold">Irreversible Deletion</p>
+              <p className="text-[11px] leading-relaxed">
+                Deleting this website will permanently remove its crawled HTML pages, tracked keywords, Google Search Console &amp; GA4 sync caches, AI audit history, and content drafts.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <div>
+              <p className="text-xs font-bold text-[var(--color-foreground)]">Delete this Website</p>
+              <p className="text-[11px] text-[var(--color-muted)]">Once deleted, you can re-add it at any time from Onboarding.</p>
+            </div>
+            <button
+              type="button"
+              disabled={deletingSite}
+              onClick={async () => {
+                if (!window.confirm(`Are you sure you want to delete "${website.name}" (${website.url})?\n\nThis action cannot be undone.`)) {
+                  return;
+                }
+                setDeletingSite(true);
+                try {
+                  const res = await fetch(`/api/websites/${encodeURIComponent(website.id)}`, {
+                    method: "DELETE",
+                  });
+                  const json = (await res.json().catch(() => ({}))) as {
+                    data?: { nextWebsiteId?: string | null };
+                  };
+                  if (res.ok) {
+                    const nextId = json.data?.nextWebsiteId;
+                    if (nextId) {
+                      document.cookie = `active_website_id=${encodeURIComponent(nextId)}; path=/; max-age=31536000; samesite=lax`;
+                      router.push(`/?website=${encodeURIComponent(nextId)}`);
+                    } else {
+                      document.cookie = "active_website_id=; path=/; max-age=0";
+                      router.push("/websites");
+                    }
+                    router.refresh();
+                  } else {
+                    alert("Failed to delete website. Please try again.");
+                  }
+                } catch {
+                  alert("Error deleting website.");
+                } finally {
+                  setDeletingSite(false);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500 bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-700 disabled:opacity-50 transition-colors"
+            >
+              {deletingSite ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              {deletingSite ? "Deleting Website..." : "Delete Website"}
+            </button>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
