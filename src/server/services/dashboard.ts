@@ -290,11 +290,13 @@ export async function getDefaultWebsite(websiteId?: string) {
   let targetId = websiteId;
   let currentUserOrgIds: string[] | null = null;
   let isUserAdmin = false;
+  let currentUserId: string | null = null;
 
   try {
     const { getCurrentUser } = await import("@/server/auth");
     const user = await getCurrentUser();
     if (user) {
+      currentUserId = user.id;
       isUserAdmin = user.isAdmin;
       const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
       currentUserOrgIds = memberships.map((m) => m.orgId).filter(Boolean);
@@ -319,8 +321,12 @@ export async function getDefaultWebsite(websiteId?: string) {
   if (targetId && targetId !== "default") {
     const found = await prisma.website.findUnique({ where: { id: targetId } });
     if (found) {
-      // Regular users can only access their own organization's websites
-      if (!currentUserOrgIds || isUserAdmin || currentUserOrgIds.includes(found.orgId)) {
+      // For logged in users, enforce that the site belongs to their organization
+      if (currentUserOrgIds && currentUserOrgIds.length > 0) {
+        if (currentUserOrgIds.includes(found.orgId) || isUserAdmin) {
+          return found;
+        }
+      } else if (isUserAdmin || !currentUserId) {
         return found;
       }
     }
@@ -335,8 +341,13 @@ export async function getDefaultWebsite(websiteId?: string) {
     if (userSite) return userSite;
   }
 
-  // 2. If user is system admin or outside HTTP context, fallback to newest global website
-  if (isUserAdmin || !currentUserOrgIds) {
+  // 2. If logged in as regular user and has no website in their org, return null (never leak another user's project!)
+  if (currentUserId && !isUserAdmin) {
+    return null;
+  }
+
+  // 3. If user is system admin or outside HTTP context, fallback to newest global website
+  if (isUserAdmin || !currentUserId) {
     return prisma.website.findFirst({ orderBy: { createdAt: "desc" } });
   }
 

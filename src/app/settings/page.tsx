@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardHeader } from "@/components/card";
 import { DataTable } from "@/components/data-table";
 import { EmptyState, PageHeading } from "@/components/empty-state";
@@ -21,10 +22,20 @@ export default async function SettingsPage(props: PageProps<"/settings">) {
 
   if (!website) {
     return (
-      <EmptyState
-        title="No website connected"
-        message="Run `npm run sync:lite` or `npx tsx prisma/seed.ts` first."
-      />
+      <div className="p-6 max-w-lg mx-auto text-center pt-20">
+        <EmptyState
+          title="No website connected"
+          message="Please connect a website in your workspace to manage its settings and API integrations."
+        />
+        <div className="mt-4 flex justify-center">
+          <Link
+            href="/onboarding"
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-primary)] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[var(--color-primary-hover)] transition-colors"
+          >
+            Add Website Now
+          </Link>
+        </div>
+      </div>
     );
   }
 

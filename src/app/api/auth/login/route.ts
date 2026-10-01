@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "")
+  const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
     .toLowerCase()
     .split(",")
     .map((e) => e.trim())
@@ -56,11 +56,33 @@ export async function POST(request: Request) {
     Boolean((user as any).isAdmin) ||
     (user as any).role === "ADMIN" ||
     configuredAdminEmails.includes(user.email.toLowerCase()) ||
-    user.email.toLowerCase().startsWith("admin@");
+    user.email.toLowerCase() === "suriyamanikandan4@gmail.com";
 
-  const membership = await prisma.orgMember.findFirst({
+  let membership = await prisma.orgMember.findFirst({
     where: { userId: user.id },
   });
+
+  let userOrgId = membership?.orgId;
+  if (!userOrgId) {
+    const newOrg = await prisma.organization.create({
+      data: {
+        name: `${user.name || "My"} Workspace`,
+        slug: `org-${user.id.slice(-6)}-${Math.random().toString(36).slice(2, 6)}`,
+      },
+    });
+    await prisma.orgMember.create({
+      data: { orgId: newOrg.id, userId: user.id, role: "OWNER" },
+    });
+    userOrgId = newOrg.id;
+  }
+
+  // Find user's own most recently accessed or created website
+  const userWebsites = await prisma.website.findMany({
+    where: { orgId: userOrgId },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+  });
+  const primaryWebsiteId = userWebsites[0]?.id ?? null;
 
   const ttlDays = rememberMe ? 30 : 1;
   const token = createSessionToken(
@@ -70,7 +92,7 @@ export async function POST(request: Request) {
       name: user.name ?? email.split("@")[0]!,
       isAdmin: isSystemAdmin,
       role: isSystemAdmin ? "ADMIN" : ((user as any).role || "USER"),
-      orgId: membership?.orgId,
+      orgId: userOrgId,
     },
     ttlDays,
   );
@@ -84,7 +106,7 @@ export async function POST(request: Request) {
         isAdmin: isSystemAdmin,
         role: isSystemAdmin ? "ADMIN" : ((user as any).role || "USER"),
       },
-      redirectTo: "/",
+      redirectTo: primaryWebsiteId ? "/" : "/onboarding",
     },
   });
 
@@ -93,7 +115,22 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: 60 * 60 * 24 * ttlDays,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
   });
+
+  if (primaryWebsiteId) {
+    response.cookies.set("active_website_id", primaryWebsiteId, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
+  } else {
+    response.cookies.set("active_website_id", "", {
+      path: "/",
+      maxAge: 0,
+      sameSite: "lax",
+    });
+  }
 
   return response;
 }

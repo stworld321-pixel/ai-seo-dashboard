@@ -52,17 +52,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const userCount = await prisma.user.count();
-  const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "")
+  const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
     .toLowerCase()
     .split(",")
     .map((e) => e.trim())
     .filter(Boolean);
 
-  const isFirstUserOrAdmin =
-    userCount === 0 ||
+  const isConfiguredAdmin =
     configuredAdminEmails.includes(email) ||
-    email.startsWith("admin@");
+    email === "suriyamanikandan4@gmail.com";
 
   const passwordHash = hashPassword(password);
   const user = await prisma.user.create({
@@ -70,11 +68,11 @@ export async function POST(request: Request) {
       name,
       email,
       passwordHash,
-      isAdmin: isFirstUserOrAdmin,
-      role: isFirstUserOrAdmin ? "ADMIN" : "USER",
-      plan: isFirstUserOrAdmin ? "ENTERPRISE" : selectedPlan,
-      creditsRemaining: isFirstUserOrAdmin ? 100000 : initialCredits,
-      creditsTotal: isFirstUserOrAdmin ? 100000 : initialCredits,
+      isAdmin: isConfiguredAdmin,
+      role: isConfiguredAdmin ? "ADMIN" : "USER",
+      plan: isConfiguredAdmin ? "ENTERPRISE" : selectedPlan,
+      creditsRemaining: isConfiguredAdmin ? 100000 : initialCredits,
+      creditsTotal: isConfiguredAdmin ? 100000 : initialCredits,
     } as any,
   });
 
@@ -104,8 +102,8 @@ export async function POST(request: Request) {
     userId: user.id,
     email: user.email,
     name: user.name ?? name,
-    isAdmin: isFirstUserOrAdmin,
-    role: isFirstUserOrAdmin ? "ADMIN" : "USER",
+    isAdmin: isConfiguredAdmin,
+    role: isConfiguredAdmin ? "ADMIN" : "USER",
     orgId: org.id,
     orgName: org.name,
   });
@@ -116,6 +114,8 @@ export async function POST(request: Request) {
         id: user.id,
         name: user.name ?? name,
         email: user.email,
+        isAdmin: isConfiguredAdmin,
+        role: isConfiguredAdmin ? "ADMIN" : "USER",
       },
       redirectTo: "/onboarding",
     },
@@ -125,6 +125,14 @@ export async function POST(request: Request) {
     httpOnly: true,
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+
+  // Clear any legacy/stale website cookie from previous sessions
+  response.cookies.set("active_website_id", "", {
+    path: "/",
+    maxAge: 0,
     sameSite: "lax",
   });
 

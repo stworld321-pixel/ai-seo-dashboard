@@ -102,9 +102,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     const isSystemAdmin =
       Boolean(rawUser.isAdmin) ||
       rawUser.role === "ADMIN" ||
-      session.isAdmin === true ||
       configuredAdminEmails.includes(dbUser.email.toLowerCase()) ||
-      dbUser.email.toLowerCase().startsWith("admin@") ||
       dbUser.email.toLowerCase() === "suriyamanikandan4@gmail.com";
 
     const userPlan = rawUser.plan || (isSystemAdmin ? "ENTERPRISE" : "BASIC");

@@ -63,59 +63,55 @@ export async function POST(request: Request) {
   let user = await getCurrentUser();
 
   if (!user) {
-    // If unauthenticated, find existing primary user or auto-provision workspace
+    // If unauthenticated, provision a fresh dedicated tenant user and workspace
     try {
-      let dbUser = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
-      if (!dbUser) {
-        dbUser = await prisma.user.create({
-          data: {
-            email: process.env.ADMIN_EMAIL || "admin@ai-seo-command.local",
-            name: "Admin User",
-            passwordHash: hashPassword("Admin123!"),
-            role: "ADMIN",
-          } as any,
-        });
-      }
+      const guestId = Math.random().toString(36).slice(2, 8);
+      const guestEmail = `user-${guestId}@workspace.local`;
+      const dbUser = await prisma.user.create({
+        data: {
+          email: guestEmail,
+          name: "Workspace Member",
+          passwordHash: hashPassword(Math.random().toString(36)),
+          isAdmin: false,
+          role: "USER",
+          plan: "BASIC",
+          creditsRemaining: 5000,
+          creditsTotal: 5000,
+        } as any,
+      });
 
-      let membership = await prisma.orgMember.findFirst({ where: { userId: dbUser.id } });
-      let orgId = membership?.orgId || null;
-      let orgName = "Primary Workspace";
+      const newOrg = await prisma.organization.create({
+        data: {
+          name: "My Workspace",
+          slug: `workspace-${dbUser.id.slice(-6)}-${Math.random().toString(36).slice(2, 6)}`,
+        },
+      });
 
-      if (!orgId) {
-        const newOrg = await prisma.organization.create({
-          data: {
-            name: `${dbUser.name || "My"} Workspace`,
-            slug: `org-${dbUser.id.slice(-6)}-${Math.random().toString(36).slice(2, 6)}`,
-          },
-        });
-        await prisma.orgMember.create({
-          data: { orgId: newOrg.id, userId: dbUser.id, role: "OWNER" },
-        });
-        orgId = newOrg.id;
-        orgName = newOrg.name;
-      }
+      await prisma.orgMember.create({
+        data: { orgId: newOrg.id, userId: dbUser.id, role: "OWNER" },
+      });
 
       user = {
         id: dbUser.id,
         email: dbUser.email,
         name: dbUser.name,
-        isAdmin: true,
-        role: "ADMIN",
-        plan: "ENTERPRISE",
-        creditsRemaining: 100000,
-        creditsTotal: 100000,
-        orgId,
-        orgName,
+        isAdmin: false,
+        role: "USER",
+        plan: "BASIC",
+        creditsRemaining: 5000,
+        creditsTotal: 5000,
+        orgId: newOrg.id,
+        orgName: newOrg.name,
       };
 
       sessionTokenToSet = createSessionToken({
         userId: user.id,
         email: user.email,
-        name: user.name || "Admin User",
-        isAdmin: true,
-        role: "ADMIN",
-        orgId: user.orgId || undefined,
-        orgName: user.orgName || undefined,
+        name: user.name || "Workspace Member",
+        isAdmin: false,
+        role: "USER",
+        orgId: newOrg.id,
+        orgName: newOrg.name,
       });
     } catch (err: unknown) {
       return NextResponse.json(
