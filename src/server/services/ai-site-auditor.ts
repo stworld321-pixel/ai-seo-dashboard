@@ -19,8 +19,6 @@ import http from "node:http";
 import https from "node:https";
 import { prisma } from "@/server/db";
 import { classifyIntent } from "@/server/intelligence/intent";
-import { recomputeWebsiteOpportunities } from "@/server/services/dashboard";
-import { getConfiguredAiModels } from "@/server/integrations/llm/provider";
 
 export function fetchUrlResilient(
   targetUrl: string,
@@ -587,6 +585,7 @@ async function inferSiteAiInsights(params: {
 
   // Try configured AI model first if an API key is active
   try {
+    const { getConfiguredAiModels } = await import("@/server/integrations/llm/provider");
     const models = await getConfiguredAiModels(websiteId);
     const active = models.find((m) => m.isActive) ?? models[0];
     if (active && active.provider === "openai" && process.env.OPENAI_API_KEY) {
@@ -1041,7 +1040,12 @@ export async function runFullSiteAiAudit(websiteId: string): Promise<{
   }
 
   // 5. Recompute Keywords & Opportunities for this website
-  await recomputeWebsiteOpportunities(websiteId, "28d");
+  try {
+    const { recomputeWebsiteOpportunities } = await import("@/server/services/dashboard");
+    await recomputeWebsiteOpportunities(websiteId, "28d");
+  } catch (err) {
+    console.error("[ai-site-auditor] Error recomputing opportunities:", err);
+  }
 
   // 6. Clean up false positive missing meta issues for pages that now have valid meta descriptions
   const validMetaPages = effectivePages.filter((p) => Boolean(p.metaDescription?.trim()));
