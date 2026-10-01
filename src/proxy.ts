@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/api/auth/logout",
   "/api/auth/me",
   "/api/integrations/google/callback",
+  "/api/db-health", // gated by CRON_SECRET, not by session
 ];
 
 export function proxy(request: NextRequest) {
