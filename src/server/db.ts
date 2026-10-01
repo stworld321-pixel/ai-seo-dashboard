@@ -35,6 +35,13 @@ function isConnectionError(err: unknown): boolean {
   );
 }
 
+/**
+ * The JSON fallback is a local-dev convenience only. In production it silently
+ * writes to a /tmp file that Vercel wipes between invocations, which looks like
+ * "connected to the database but losing data". Fail loud there instead.
+ */
+const ALLOW_FALLBACK = process.env.NODE_ENV !== "production" && !process.env.VERCEL;
+
 let isSeeding = false;
 async function ensureSeeded() {
   // Do not auto-seed demo data so workspaces start clean
@@ -48,6 +55,13 @@ function createUnderlyingClient(): PrismaClient | null {
     connectionString.includes("user:pass@host") ||
     connectionString.includes("localhost:51214")
   ) {
+    if (!ALLOW_FALLBACK) {
+      throw new Error(
+        `DATABASE_URL is ${connectionString ? "still a local/placeholder value" : "not set"} in this environment. ` +
+          "Set it in the Vercel project's Environment Variables and redeploy — a .env file is never uploaded. " +
+          "Verify with /api/db-health?secret=$CRON_SECRET.",
+      );
+    }
     globalThis.__pgOffline = true;
     return null;
   }
@@ -62,7 +76,8 @@ function createUnderlyingClient(): PrismaClient | null {
       adapter,
       log: [],
     });
-  } catch {
+  } catch (err) {
+    if (!ALLOW_FALLBACK) throw err;
     globalThis.__pgOffline = true;
     return null;
   }
@@ -99,7 +114,7 @@ function createResilientClient(): PrismaClient {
             try {
               return await (rawClient.$transaction as (a: unknown) => Promise<unknown>)(arg);
             } catch (err) {
-              if (!isConnectionError(err)) throw err;
+              if (!isConnectionError(err) || !ALLOW_FALLBACK) throw err;
               globalThis.__pgOffline = true;
             }
           }
@@ -126,7 +141,7 @@ function createResilientClient(): PrismaClient {
               try {
                 return await pgDelegate[method]!(...args);
               } catch (err) {
-                if (!isConnectionError(err)) throw err;
+                if (!isConnectionError(err) || !ALLOW_FALLBACK) throw err;
                 globalThis.__pgOffline = true;
               }
             }
