@@ -12,7 +12,8 @@ import { defineConfig } from "prisma/config";
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
-    url: process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/seo",
+    // Prisma CLI (migrate/studio) needs a direct, non-pooled connection; runtime uses DATABASE_URL.
+    url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/seo",
     ...(process.env.SHADOW_DATABASE_URL
       ? { shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL }
       : {}),
