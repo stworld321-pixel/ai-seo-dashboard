@@ -190,12 +190,16 @@ function toTimestamp(v: unknown): number {
 }
 
 function sameDateOrValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
   if (a instanceof Date || b instanceof Date) {
     const da = a instanceof Date ? a.toISOString().slice(0, 10) : String(a).slice(0, 10);
     const db = b instanceof Date ? b.toISOString().slice(0, 10) : String(b).slice(0, 10);
     return da === db;
   }
-  return a === b;
+  if (typeof a === "string" && typeof b === "string") {
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
+  }
+  return false;
 }
 
 function matchesWhere(row: Row, where?: Record<string, unknown>): boolean {

@@ -30,10 +30,22 @@ export async function POST(request: Request) {
   }
 
   const email = parsed.data.email.trim().toLowerCase();
+  const rawEmail = parsed.data.email.trim();
   const password = parsed.data.password;
   const rememberMe = parsed.data.rememberMe ?? true;
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  let user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: rawEmail },
+          { email: email },
+        ],
+      },
+    });
+  }
+
   if (!user || !verifyPassword(password, user.passwordHash)) {
     return NextResponse.json(
       {

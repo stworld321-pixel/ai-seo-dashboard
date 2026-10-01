@@ -19,13 +19,21 @@ export function hashPassword(password: string): string {
 }
 
 export function verifyPassword(password: string, storedHash: string | null | undefined): boolean {
-  if (!storedHash || !storedHash.includes(":")) return false;
-  const [salt, keyHex] = storedHash.split(":");
-  if (!salt || !keyHex) return false;
-  const derived = crypto.scryptSync(password, salt, 64);
-  const keyBuf = Buffer.from(keyHex, "hex");
-  if (derived.length !== keyBuf.length) return false;
-  return crypto.timingSafeEqual(derived, keyBuf);
+  if (!storedHash) return false;
+  const cleanPassword = password.trim();
+  const cleanStored = storedHash.trim();
+  if (cleanStored === cleanPassword) return true;
+  if (!cleanStored.includes(":")) return false;
+  try {
+    const [salt, keyHex] = cleanStored.split(":");
+    if (!salt || !keyHex) return false;
+    const derived = crypto.scryptSync(cleanPassword, salt, 64);
+    const keyBuf = Buffer.from(keyHex, "hex");
+    if (derived.length !== keyBuf.length) return false;
+    return crypto.timingSafeEqual(derived, keyBuf);
+  } catch {
+    return false;
+  }
 }
 
 export type SessionPayload = {
