@@ -93,22 +93,29 @@ export function WebsiteSwitcher({
       const res = await fetch(`/api/websites/${encodeURIComponent(site.id)}`, { method: "DELETE" });
       const json = (await res.json().catch(() => ({}))) as {
         data?: { nextWebsiteId?: string | null };
+        error?: { message?: string };
       };
-      setWebsites((prev) => prev.filter((w) => w.id !== site.id));
-      const nextId = json.data?.nextWebsiteId;
-      const params = new URLSearchParams(searchParams.toString());
-      if (nextId) {
-        setActiveWebsiteCookie(nextId);
-        params.set("website", nextId);
-        setOpen(false);
-        router.push(`${pathname}?${params.toString()}`);
+      if (res.ok) {
+        setWebsites((prev) => prev.filter((w) => w.id !== site.id));
+        const nextId = json.data?.nextWebsiteId;
+        const params = new URLSearchParams(searchParams.toString());
+        if (nextId) {
+          setActiveWebsiteCookie(nextId);
+          params.set("website", nextId);
+          setOpen(false);
+          router.push(`${pathname}?${params.toString()}`);
+        } else {
+          document.cookie = "active_website_id=; path=/; max-age=0";
+          params.delete("website");
+          setOpen(false);
+          router.push("/websites");
+        }
+        router.refresh();
       } else {
-        document.cookie = "active_website_id=; path=/; max-age=0";
-        params.delete("website");
-        setOpen(false);
-        router.push("/websites");
+        alert(json.error?.message || "Failed to remove website. Please try again.");
       }
-      router.refresh();
+    } catch {
+      alert("Error removing website.");
     } finally {
       setBusyId(null);
     }

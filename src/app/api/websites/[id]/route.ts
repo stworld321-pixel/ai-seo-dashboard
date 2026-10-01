@@ -10,7 +10,7 @@ export async function DELETE(
 ) {
   const user = await getCurrentUser();
   if (!user) {
-    return NextResponse.json({ error: { message: "Unauthorized" } }, { status: 401 });
+    return NextResponse.json({ error: { message: "Unauthorized: Please sign in to remove websites." } }, { status: 401 });
   }
 
   const { id } = await context.params;
@@ -18,41 +18,60 @@ export async function DELETE(
     return NextResponse.json({ error: { message: "Website ID is required" } }, { status: 400 });
   }
 
-  const website = await prisma.website.findUnique({ where: { id } });
+  // 1. Try finding website in Prisma
+  let website = await prisma.website.findUnique({ where: { id } });
   if (!website) {
-    return NextResponse.json({ error: { message: "Website not found" } }, { status: 404 });
+    website = await prisma.website.findFirst({
+      where: { OR: [{ id }, { url: id }, { url: `${id}/` }] },
+    });
   }
 
+  // 2. Permission check:
   if (!user.isAdmin) {
     const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
-    const userOrgIds = memberships.map((m) => m.orgId);
-    if (!userOrgIds.includes(website.orgId)) {
-      return NextResponse.json({ error: { message: "Forbidden" } }, { status: 403 });
+    const userOrgIds = memberships.map((m) => m.orgId).filter(Boolean);
+    if (user.orgId && !userOrgIds.includes(user.orgId)) {
+      userOrgIds.push(user.orgId);
+    }
+
+    if (website && !userOrgIds.includes(website.orgId)) {
+      return NextResponse.json(
+        { error: { message: "Forbidden: You do not have permission to delete this website." } },
+        { status: 403 },
+      );
     }
   }
 
-  // 1. Delete from PostgreSQL database (with Prisma cascade on child records)
+  const orgId = website?.orgId || user.orgId || "";
+
+  // 3. Delete from PostgreSQL database (with Prisma cascade on child records)
   try {
-    await prisma.website.delete({ where: { id } }).catch(() => {});
+    if (website) {
+      await prisma.website.delete({ where: { id: website.id } });
+    } else {
+      await prisma.website.deleteMany({ where: { id } });
+    }
   } catch {
-    // ignore
+    // If not found or already deleted in DB, proceed to local store purge
   }
 
-  // 2. Also purge from local resilient store
-  const result = purgeWebsiteFromLocalStore(id, website.orgId);
+  // 4. Also purge from local resilient store
+  const result = purgeWebsiteFromLocalStore(id, orgId);
 
-  // Find next website in the organization
-  const nextSite = await prisma.website.findFirst({
-    where: { orgId: website.orgId, id: { not: id } },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const nextId = nextSite?.id || result.nextWebsiteId || null;
+  // 5. Find next remaining website for this user
+  let nextId: string | null = null;
+  if (orgId) {
+    const nextSite = await prisma.website.findFirst({
+      where: { orgId, id: { not: id } },
+      orderBy: { createdAt: "desc" },
+    });
+    nextId = nextSite?.id || result.nextWebsiteId || null;
+  }
 
   const response = NextResponse.json({
     data: {
       deletedId: id,
-      deletedName: website.name || result.deletedName,
+      deletedName: website?.name || result.deletedName || "Website",
       nextWebsiteId: nextId,
     },
   });
@@ -64,7 +83,11 @@ export async function DELETE(
       sameSite: "lax",
     });
   } else {
-    response.cookies.delete("active_website_id");
+    response.cookies.set("active_website_id", "", {
+      path: "/",
+      maxAge: 0,
+      sameSite: "lax",
+    });
   }
 
   return response;

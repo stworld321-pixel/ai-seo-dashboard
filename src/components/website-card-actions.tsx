@@ -46,6 +46,7 @@ export function WebsiteCardActions({
       });
       const json = (await res.json().catch(() => ({}))) as {
         data?: { nextWebsiteId?: string | null };
+        error?: { message?: string };
       };
       if (res.ok) {
         setRemoved(true);
@@ -57,10 +58,10 @@ export function WebsiteCardActions({
         }
         router.refresh();
       } else {
-        alert("Failed to remove website. Please check permissions and try again.");
+        alert(json.error?.message || "Failed to remove website. Please check permissions and try again.");
       }
     } catch {
-      alert("Error removing website.");
+      alert("Network error removing website.");
     } finally {
       setDeleting(false);
     }
