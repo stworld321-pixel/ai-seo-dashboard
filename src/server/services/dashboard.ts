@@ -296,12 +296,10 @@ export async function getDefaultWebsite(websiteId?: string) {
     const user = await getCurrentUser();
     if (user) {
       isUserAdmin = user.isAdmin;
-      if (!isUserAdmin) {
-        const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
-        currentUserOrgIds = memberships.map((m) => m.orgId).filter(Boolean);
-        if (currentUserOrgIds.length === 0 && user.orgId) {
-          currentUserOrgIds = [user.orgId];
-        }
+      const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
+      currentUserOrgIds = memberships.map((m) => m.orgId).filter(Boolean);
+      if (currentUserOrgIds.length === 0 && user.orgId) {
+        currentUserOrgIds = [user.orgId];
       }
     }
   } catch {
@@ -328,16 +326,21 @@ export async function getDefaultWebsite(websiteId?: string) {
     }
   }
 
-  // Fallback to first website in the user's organization
-  if (currentUserOrgIds && !isUserAdmin) {
-    if (currentUserOrgIds.length === 0) return null;
-    return prisma.website.findFirst({
+  // 1. Prioritize websites in the user's own organization (most recently added first)
+  if (currentUserOrgIds && currentUserOrgIds.length > 0) {
+    const userSite = await prisma.website.findFirst({
       where: { orgId: { in: currentUserOrgIds } },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
     });
+    if (userSite) return userSite;
   }
 
-  return prisma.website.findFirst({ orderBy: { createdAt: "asc" } });
+  // 2. If user is system admin or outside HTTP context, fallback to newest global website
+  if (isUserAdmin || !currentUserOrgIds) {
+    return prisma.website.findFirst({ orderBy: { createdAt: "desc" } });
+  }
+
+  return null;
 }
 
 export async function listWebsites(options?: { all?: boolean }) {
@@ -346,7 +349,7 @@ export async function listWebsites(options?: { all?: boolean }) {
     const user = await getCurrentUser();
     if (user) {
       if (user.isAdmin && options?.all) {
-        return prisma.website.findMany({ orderBy: { createdAt: "asc" } });
+        return prisma.website.findMany({ orderBy: { createdAt: "desc" } });
       }
       const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
       const orgIds = memberships.map((m) => m.orgId).filter(Boolean);
@@ -355,15 +358,19 @@ export async function listWebsites(options?: { all?: boolean }) {
       if (orgIds.length > 0) {
         return prisma.website.findMany({
           where: { orgId: { in: orgIds } },
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: "desc" },
         });
+      }
+
+      if (user.isAdmin) {
+        return prisma.website.findMany({ orderBy: { createdAt: "desc" } });
       }
       return [];
     }
   } catch {
     // Outside request context
   }
-  return prisma.website.findMany({ orderBy: { createdAt: "asc" } });
+  return prisma.website.findMany({ orderBy: { createdAt: "desc" } });
 }
 
 export async function getOpportunities(

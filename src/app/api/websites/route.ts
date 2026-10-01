@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
   if (user.isAdmin && showAll) {
     const websites = await prisma.website.findMany({
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ data: websites });
   }
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
 
   const websites = await prisma.website.findMany({
     where: { orgId: { in: orgIds } },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json({ data: websites });
