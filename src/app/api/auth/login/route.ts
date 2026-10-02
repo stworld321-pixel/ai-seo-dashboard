@@ -6,6 +6,7 @@ import {
   SESSION_COOKIE_NAME,
   verifyPassword,
 } from "@/server/auth";
+import { isAdminEmail } from "@/server/authz";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -58,17 +59,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
-    .toLowerCase()
-    .split(",")
-    .map((e) => e.trim())
-    .filter(Boolean);
-
-  const isSystemAdmin =
-    Boolean((user as any).isAdmin) ||
-    (user as any).role === "ADMIN" ||
-    configuredAdminEmails.includes(user.email.toLowerCase()) ||
-    user.email.toLowerCase() === "suriyamanikandan4@gmail.com";
+  // Single source of truth (src/server/authz.ts). This used to also accept the
+  // database isAdmin flag and a role of "ADMIN", which minted a session claiming
+  // admin for accounts the gate then refused — confusing, and the wrong default.
+  const isSystemAdmin = isAdminEmail(user.email);
 
   let membership = await prisma.orgMember.findFirst({
     where: { userId: user.id },
@@ -103,7 +97,7 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name ?? email.split("@")[0]!,
       isAdmin: isSystemAdmin,
-      role: isSystemAdmin ? "ADMIN" : ((user as any).role || "USER"),
+      role: isSystemAdmin ? "ADMIN" : "USER",
       orgId: userOrgId,
     },
     ttlDays,
@@ -116,7 +110,7 @@ export async function POST(request: Request) {
         name: user.name ?? email.split("@")[0]!,
         email: user.email,
         isAdmin: isSystemAdmin,
-        role: isSystemAdmin ? "ADMIN" : ((user as any).role || "USER"),
+        role: isSystemAdmin ? "ADMIN" : "USER",
       },
       redirectTo: primaryWebsiteId ? "/" : "/onboarding",
     },

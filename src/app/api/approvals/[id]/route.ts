@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { markdownToWordPressHtml, buildArticleAndFaqSchema } from "@/server/intelligence/content-scorer";
+import { canAccessWebsite } from "@/server/auth";
+
+/** Same 404 whether the record is missing or belongs to another tenant. */
+const notFound = () =>
+  NextResponse.json({ error: { code: "NOT_FOUND", message: "Approval item not found" } }, { status: 404 });
 
 export async function GET(
   request: Request,
@@ -12,12 +17,8 @@ export async function GET(
     include: { website: true },
   });
 
-  if (!approval) {
-    return NextResponse.json(
-      { error: { code: "NOT_FOUND", message: "Approval item not found" } },
-      { status: 404 },
-    );
-  }
+  if (!approval) return notFound();
+  if (!(await canAccessWebsite(approval.websiteId))) return notFound();
 
   let content = null;
   let htmlPreview = "";
@@ -80,12 +81,8 @@ export async function POST(
     where: { id },
     include: { website: true },
   });
-  if (!approval) {
-    return NextResponse.json(
-      { error: { code: "NOT_FOUND", message: "Approval item not found" } },
-      { status: 404 },
-    );
-  }
+  if (!approval) return notFound();
+  if (!(await canAccessWebsite(approval.websiteId))) return notFound();
 
   const now = new Date();
   let wpSyncMessage = "";

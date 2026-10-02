@@ -28,7 +28,7 @@ const createWebsiteSchema = z.object({
   wpAppPassword: z.string().max(160).optional(),
 });
 
-import { getCurrentUser, createSessionToken, SESSION_COOKIE_NAME, hashPassword } from "@/server/auth";
+import { getCurrentUser } from "@/server/auth";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -59,71 +59,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  let sessionTokenToSet: string | null = null;
-  let user = await getCurrentUser();
-
+  // Previously an unauthenticated POST silently provisioned a throwaway account
+  // ("user-xxxx@workspace.local") and handed back a session for it. A SaaS must
+  // not create real tenants from an anonymous request — fail closed instead.
+  const user = await getCurrentUser();
   if (!user) {
-    // If unauthenticated, provision a fresh dedicated tenant user and workspace
-    try {
-      const guestId = Math.random().toString(36).slice(2, 8);
-      const guestEmail = `user-${guestId}@workspace.local`;
-      const dbUser = await prisma.user.create({
-        data: {
-          email: guestEmail,
-          name: "Workspace Member",
-          passwordHash: hashPassword(Math.random().toString(36)),
-          isAdmin: false,
-          role: "USER",
-          plan: "BASIC",
-          creditsRemaining: 5000,
-          creditsTotal: 5000,
-        } as any,
-      });
-
-      const newOrg = await prisma.organization.create({
-        data: {
-          name: "My Workspace",
-          slug: `workspace-${dbUser.id.slice(-6)}-${Math.random().toString(36).slice(2, 6)}`,
-        },
-      });
-
-      await prisma.orgMember.create({
-        data: { orgId: newOrg.id, userId: dbUser.id, role: "OWNER" },
-      });
-
-      user = {
-        id: dbUser.id,
-        email: dbUser.email,
-        name: dbUser.name,
-        isAdmin: false,
-        role: "USER",
-        plan: "BASIC",
-        creditsRemaining: 5000,
-        creditsTotal: 5000,
-        orgId: newOrg.id,
-        orgName: newOrg.name,
-      };
-
-      sessionTokenToSet = createSessionToken({
-        userId: user.id,
-        email: user.email,
-        name: user.name || "Workspace Member",
-        isAdmin: false,
-        role: "USER",
-        orgId: newOrg.id,
-        orgName: newOrg.name,
-      });
-    } catch (err: unknown) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "INIT_ERROR",
-            message: err instanceof Error ? err.message : "Failed to initialize workspace.",
-          },
-        },
-        { status: 500 },
-      );
-    }
+    return NextResponse.json(
+      { error: { code: "UNAUTHORIZED", message: "Sign in to add a website." } },
+      { status: 401 },
+    );
   }
 
   const json = await request.json().catch(() => null);
@@ -345,15 +289,6 @@ export async function POST(request: Request) {
     .catch(() => {});
 
   const response = NextResponse.json({ data: website });
-  if (sessionTokenToSet) {
-    response.cookies.set(SESSION_COOKIE_NAME, sessionTokenToSet, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 30 * 24 * 60 * 60,
-    });
-  }
   response.cookies.set("active_website_id", website.id, {
     path: "/",
     maxAge: 60 * 60 * 24 * 365,

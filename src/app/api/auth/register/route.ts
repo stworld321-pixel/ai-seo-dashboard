@@ -6,6 +6,7 @@ import {
   hashPassword,
   SESSION_COOKIE_NAME,
 } from "@/server/auth";
+import { isAdminEmail } from "@/server/authz";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Full name must be at least 2 characters").max(120),
@@ -52,15 +53,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
-    .toLowerCase()
-    .split(",")
-    .map((e) => e.trim())
-    .filter(Boolean);
-
-  const isConfiguredAdmin =
-    configuredAdminEmails.includes(email) ||
-    email === "suriyamanikandan4@gmail.com";
+  // Single source of truth (src/server/authz.ts).
+  const isConfiguredAdmin = isAdminEmail(email);
 
   const passwordHash = hashPassword(password);
   const user = await prisma.user.create({

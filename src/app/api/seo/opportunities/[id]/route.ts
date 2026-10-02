@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
+import { canAccessWebsite } from "@/server/auth";
+
+/** Same 404 whether the record is missing or belongs to another tenant. */
+const notFound = () =>
+  NextResponse.json({ error: { code: "NOT_FOUND", message: "Opportunity not found" } }, { status: 404 });
 
 export async function GET(
   _request: Request,
@@ -11,12 +16,8 @@ export async function GET(
     include: { website: true },
   });
 
-  if (!opp) {
-    return NextResponse.json(
-      { error: { code: "NOT_FOUND", message: "Opportunity not found" } },
-      { status: 404 },
-    );
-  }
+  if (!opp) return notFound();
+  if (!(await canAccessWebsite(opp.websiteId))) return notFound();
 
   // Find any linked content / approvals
   const approvals = await prisma.approval.findMany({
@@ -42,12 +43,8 @@ export async function PATCH(
   };
 
   const existing = await prisma.opportunity.findUnique({ where: { id } });
-  if (!existing) {
-    return NextResponse.json(
-      { error: { code: "NOT_FOUND", message: "Opportunity not found" } },
-      { status: 404 },
-    );
-  }
+  if (!existing) return notFound();
+  if (!(await canAccessWebsite(existing.websiteId))) return notFound();
 
   const updated = await prisma.opportunity.update({
     where: { id },
@@ -69,12 +66,8 @@ export async function DELETE(
 ) {
   const { id } = await context.params;
   const existing = await prisma.opportunity.findUnique({ where: { id } });
-  if (!existing) {
-    return NextResponse.json(
-      { error: { code: "NOT_FOUND", message: "Opportunity not found" } },
-      { status: 404 },
-    );
-  }
+  if (!existing) return notFound();
+  if (!(await canAccessWebsite(existing.websiteId))) return notFound();
 
   await prisma.opportunity.delete({ where: { id } });
   return NextResponse.json({ data: { success: true, id } });

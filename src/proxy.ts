@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/server/auth";
+import { isAdminEmail } from "@/server/authz";
 
 const PUBLIC_FILE_REGEX = /\.(.*)$/;
 
@@ -58,22 +59,18 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Check Admin privilege for /admin routes
-  if (pathname.startsWith("/admin")) {
-    const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
-      .toLowerCase()
-      .split(",")
-      .map((e) => e.trim())
-      .filter(Boolean);
-
-    const userEmail = (session.email || "").toLowerCase();
-    const isUserAdmin =
-      Boolean(session.isAdmin) ||
-      session.role === "ADMIN" ||
-      configuredAdminEmails.includes(userEmail) ||
-      userEmail === "suriyamanikandan4@gmail.com";
-
-    if (!isUserAdmin) {
+  // 5. Check Admin privilege for /admin routes and the admin APIs behind them.
+  //    Decided by the configured address only: session.isAdmin / session.role
+  //    are claims minted at login, so a token issued before a demotion would
+  //    otherwise keep working until it expired.
+  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+    if (!isAdminEmail(session.email)) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          { error: { code: "FORBIDDEN", message: "Administrator access required." } },
+          { status: 403 },
+        );
+      }
       const dashboardUrl = request.nextUrl.clone();
       dashboardUrl.pathname = "/";
       dashboardUrl.searchParams.set("error", "admin_required");

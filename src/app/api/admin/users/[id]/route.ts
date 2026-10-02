@@ -40,15 +40,23 @@ export async function PATCH(
     return NextResponse.json({ error: { message: "User not found" } }, { status: 404 });
   }
 
+  // Admin is decided by the configured address (see src/server/authz.ts), so
+  // writing these columns would grant nothing while appearing to succeed —
+  // which is the dangerous direction for a privilege control. Reject instead.
+  if (typeof parsed.data.isAdmin === "boolean" || parsed.data.role) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "NOT_SUPPORTED",
+          message:
+            "Administrator access is granted by email address, not per-user flags. Set ADMIN_EMAILS in the environment to change who is an admin.",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   const dataToUpdate: Record<string, unknown> = {};
-  if (typeof parsed.data.isAdmin === "boolean") {
-    dataToUpdate.isAdmin = parsed.data.isAdmin;
-    dataToUpdate.role = parsed.data.isAdmin ? "ADMIN" : "USER";
-  }
-  if (parsed.data.role) {
-    dataToUpdate.role = parsed.data.role;
-    dataToUpdate.isAdmin = parsed.data.role === "ADMIN";
-  }
   if (parsed.data.name) {
     dataToUpdate.name = parsed.data.name.trim();
   }

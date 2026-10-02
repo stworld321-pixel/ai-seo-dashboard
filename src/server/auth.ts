@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/server/db";
+import { isAdminEmail } from "@/server/authz";
 
 export const SESSION_COOKIE_NAME = "seo_session";
 
@@ -101,17 +102,9 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     if (!dbUser) return null;
 
     const rawUser = dbUser as any;
-    const configuredAdminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "suriyamanikandan4@gmail.com")
-      .toLowerCase()
-      .split(",")
-      .map((e) => e.trim())
-      .filter(Boolean);
-
-    const isSystemAdmin =
-      Boolean(rawUser.isAdmin) ||
-      rawUser.role === "ADMIN" ||
-      configuredAdminEmails.includes(dbUser.email.toLowerCase()) ||
-      dbUser.email.toLowerCase() === "suriyamanikandan4@gmail.com";
+    // Admin follows the configured address only — never a database flag or a
+    // claim carried in the session token. See src/server/authz.ts.
+    const isSystemAdmin = isAdminEmail(dbUser.email);
 
     const userPlan = rawUser.plan || (isSystemAdmin ? "ENTERPRISE" : "BASIC");
     const defaultCredits = userPlan === "ENTERPRISE" ? 100000 : userPlan === "PRO" ? 25000 : 5000;
@@ -158,7 +151,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       email: dbUser.email,
       name: dbUser.name ?? session.name,
       isAdmin: isSystemAdmin,
-      role: isSystemAdmin ? "ADMIN" : (rawUser.role || "USER"),
+      role: isSystemAdmin ? "ADMIN" : "USER",
       plan: userPlan,
       creditsRemaining,
       creditsTotal,
@@ -188,4 +181,40 @@ export async function requireAdmin(): Promise<AuthenticatedUser> {
     throw new Error("Admin access required");
   }
   return user;
+}
+
+/** Every organization the user belongs to. The unit of tenancy is the org. */
+export async function getAccessibleOrgIds(user: AuthenticatedUser): Promise<string[]> {
+  const memberships = await prisma.orgMember.findMany({
+    where: { userId: user.id },
+    select: { orgId: true },
+  });
+  const orgIds = memberships.map((m) => m.orgId).filter(Boolean);
+  if (orgIds.length === 0 && user.orgId) orgIds.push(user.orgId);
+  return orgIds;
+}
+
+/**
+ * Resolves a website the current user is actually allowed to touch, or null.
+ *
+ * Use this in any route that accepts a website id (or an id derived from one)
+ * from the client. Returning null rather than throwing lets callers answer with
+ * their own 403/404 without leaking whether the id exists.
+ */
+export async function getOwnedWebsite(websiteId: string) {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const website = await prisma.website.findUnique({ where: { id: websiteId } });
+  if (!website) return null;
+  if (user.isAdmin) return website;
+
+  const orgIds = await getAccessibleOrgIds(user);
+  return orgIds.includes(website.orgId) ? website : null;
+}
+
+/** Ownership check for any record that carries a websiteId. */
+export async function canAccessWebsite(websiteId: string | null | undefined): Promise<boolean> {
+  if (!websiteId) return false;
+  return (await getOwnedWebsite(websiteId)) !== null;
 }

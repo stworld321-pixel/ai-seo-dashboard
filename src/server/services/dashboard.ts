@@ -286,54 +286,59 @@ export async function getDimension(
     .sort((a, b) => b.impressions - a.impressions);
 }
 
+/**
+ * Resolves the website a request should operate on, enforcing tenancy.
+ *
+ * Every page and ~43 API routes funnel through here with a client-supplied id,
+ * so this is the chokepoint for "a user can only see their own projects". A
+ * requested id that the user does not own is ignored (never returned), and we
+ * fall back to their own most recent site.
+ *
+ * The one caller that is allowed past tenancy is a CLI script, which has no
+ * request context at all and already holds direct database credentials.
+ */
 export async function getDefaultWebsite(websiteId?: string) {
   let targetId = websiteId;
-  let currentUserOrgIds: string[] | null = null;
+  let currentUserOrgIds: string[] = [];
   let isUserAdmin = false;
-  let currentUserId: string | null = null;
+  let inRequestContext = false;
+  let hasUser = false;
 
   try {
-    const { getCurrentUser } = await import("@/server/auth");
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    inRequestContext = true;
+
+    const { getCurrentUser, getAccessibleOrgIds } = await import("@/server/auth");
     const user = await getCurrentUser();
     if (user) {
-      currentUserId = user.id;
+      hasUser = true;
       isUserAdmin = user.isAdmin;
-      const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
-      currentUserOrgIds = memberships.map((m) => m.orgId).filter(Boolean);
-      if (currentUserOrgIds.length === 0 && user.orgId) {
-        currentUserOrgIds = [user.orgId];
-      }
+      currentUserOrgIds = await getAccessibleOrgIds(user);
+    }
+
+    if (!targetId) {
+      targetId = cookieStore.get("active_website_id")?.value || undefined;
     }
   } catch {
-    // Called outside HTTP request (e.g. CLI script)
+    // No request context: a CLI script (scripts/*.ts), which is trusted.
   }
 
-  if (!targetId) {
-    try {
-      const { cookies } = await import("next/headers");
-      const cookieStore = await cookies();
-      targetId = cookieStore.get("active_website_id")?.value || undefined;
-    } catch {
-      // Called outside a Next.js HTTP request (e.g. CLI script)
-    }
-  }
+  // Inside a request, an unauthenticated caller gets nothing. The proxy already
+  // rejects these, so reaching here means a gap upstream — fail closed.
+  if (inRequestContext && !hasUser) return null;
 
   if (targetId && targetId !== "default") {
     const found = await prisma.website.findUnique({ where: { id: targetId } });
     if (found) {
-      // For logged in users, enforce that the site belongs to their organization
-      if (currentUserOrgIds && currentUserOrgIds.length > 0) {
-        if (currentUserOrgIds.includes(found.orgId) || isUserAdmin) {
-          return found;
-        }
-      } else if (isUserAdmin || !currentUserId) {
+      if (!inRequestContext || isUserAdmin || currentUserOrgIds.includes(found.orgId)) {
         return found;
       }
+      // Requested someone else's site: ignore the id and fall through to their own.
     }
   }
 
-  // 1. Prioritize websites in the user's own organization (most recently added first)
-  if (currentUserOrgIds && currentUserOrgIds.length > 0) {
+  if (currentUserOrgIds.length > 0) {
     const userSite = await prisma.website.findFirst({
       where: { orgId: { in: currentUserOrgIds } },
       orderBy: { createdAt: "desc" },
@@ -341,37 +346,48 @@ export async function getDefaultWebsite(websiteId?: string) {
     if (userSite) return userSite;
   }
 
-  // 2. If the user has no website in their organization, return null so they see the clean Onboarding wizard
+  // An admin with no site of their own still needs a workspace to inspect.
+  if (isUserAdmin) {
+    return prisma.website.findFirst({ orderBy: { createdAt: "desc" } });
+  }
+
+  // CLI scripts keep their previous behaviour of picking the newest site.
+  if (!inRequestContext) {
+    return prisma.website.findFirst({ orderBy: { createdAt: "desc" } });
+  }
+
+  // No website in the user's organization: the onboarding wizard takes over.
   return null;
 }
 
 export async function listWebsites(options?: { all?: boolean }) {
+  let inRequestContext = false;
   try {
-    const { getCurrentUser } = await import("@/server/auth");
+    const { cookies } = await import("next/headers");
+    await cookies();
+    inRequestContext = true;
+
+    const { getCurrentUser, getAccessibleOrgIds } = await import("@/server/auth");
     const user = await getCurrentUser();
+
     if (user) {
-      if (user.isAdmin && options?.all) {
-        return prisma.website.findMany({ orderBy: { createdAt: "desc" } });
-      }
-      const memberships = await prisma.orgMember.findMany({ where: { userId: user.id } });
-      const orgIds = memberships.map((m) => m.orgId).filter(Boolean);
-      if (orgIds.length === 0 && user.orgId) orgIds.push(user.orgId);
-
-      if (orgIds.length > 0) {
-        return prisma.website.findMany({
-          where: { orgId: { in: orgIds } },
-          orderBy: { createdAt: "desc" },
-        });
-      }
-
       if (user.isAdmin) {
-        return prisma.website.findMany({ orderBy: { createdAt: "desc" } });
+        // Admins see everything only when they ask for it; otherwise their own.
+        if (options?.all) return prisma.website.findMany({ orderBy: { createdAt: "desc" } });
       }
-      return [];
+      const orgIds = await getAccessibleOrgIds(user);
+      if (orgIds.length === 0) return user.isAdmin ? prisma.website.findMany({ orderBy: { createdAt: "desc" } }) : [];
+      return prisma.website.findMany({
+        where: { orgId: { in: orgIds } },
+        orderBy: { createdAt: "desc" },
+      });
     }
   } catch {
-    // Outside request context
+    // No request context: CLI script.
   }
+
+  // Fail closed inside a request; only trusted CLI callers get the full list.
+  if (inRequestContext) return [];
   return prisma.website.findMany({ orderBy: { createdAt: "desc" } });
 }
 

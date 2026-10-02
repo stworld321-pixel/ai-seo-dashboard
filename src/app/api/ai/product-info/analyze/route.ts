@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/server/auth";
+import { getCurrentUser, getOwnedWebsite } from "@/server/auth";
 import { prisma } from "@/server/db";
 import { getWebsiteBusinessIntelligence } from "@/server/services/business-intelligence";
 import { getConfiguredAiModels } from "@/server/integrations/llm/provider";
@@ -17,7 +17,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: { message: "websiteId is required" } }, { status: 400 });
   }
 
-  const website = await prisma.website.findUnique({ where: { id: body.websiteId } });
+  // Resolve through the ownership check: an authenticated user must not be able
+  // to analyse another tenant's site by passing its id.
+  const website = await getOwnedWebsite(body.websiteId);
   if (!website) {
     return NextResponse.json({ error: { message: "Website not found" } }, { status: 404 });
   }
