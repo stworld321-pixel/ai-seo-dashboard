@@ -50,11 +50,18 @@ async function ensureSeeded() {
 
 function createUnderlyingClient(): PrismaClient | null {
   const connectionString = process.env.DATABASE_URL;
-  if (
+  // localhost:51214 is this project's own local Prisma Postgres, started by
+  // scripts/ensure-db.mjs (DB_PORT = 51214) as part of `npm run dev`. Treating
+  // it as a placeholder meant every local request silently used the JSON file
+  // instead of the database the dev server had just started. It is only a
+  // mistake in production, where a localhost URL cannot be what was intended.
+  const isLocalDevDatabase = Boolean(connectionString?.includes("localhost:51214"));
+  const isUnusable =
     !connectionString ||
     connectionString.includes("user:pass@host") ||
-    connectionString.includes("localhost:51214")
-  ) {
+    (isLocalDevDatabase && !ALLOW_FALLBACK);
+
+  if (isUnusable) {
     if (!ALLOW_FALLBACK) {
       throw new Error(
         `DATABASE_URL is ${connectionString ? "still a local/placeholder value" : "not set"} in this environment. ` +

@@ -44,15 +44,35 @@ export async function DELETE(
 
   const orgId = website?.orgId || user.orgId || "";
 
-  // 3. Delete from PostgreSQL database (with Prisma cascade on child records)
+  // 3. Delete from PostgreSQL. schema.prisma declares onDelete: Cascade, but the
+  //    live database has no matching foreign keys, so deleting the parent alone
+  //    silently leaves every child row behind (verified: one site orphaned 325
+  //    rows across 12 tables). Remove children explicitly, in one transaction.
   try {
-    if (website) {
-      await prisma.website.delete({ where: { id: website.id } });
-    } else {
-      await prisma.website.deleteMany({ where: { id } });
-    }
-  } catch {
-    // If not found or already deleted in DB, proceed to local store purge
+    await prisma.$transaction([
+      prisma.gscDaily.deleteMany({ where: { websiteId: id } }),
+      prisma.gscQueryDaily.deleteMany({ where: { websiteId: id } }),
+      prisma.gscPageDaily.deleteMany({ where: { websiteId: id } }),
+      prisma.gscQueryPageDaily.deleteMany({ where: { websiteId: id } }),
+      prisma.gscDimensionDaily.deleteMany({ where: { websiteId: id } }),
+      prisma.syncCursor.deleteMany({ where: { websiteId: id } }),
+      prisma.keyword.deleteMany({ where: { websiteId: id } }),
+      prisma.opportunity.deleteMany({ where: { websiteId: id } }),
+      prisma.approval.deleteMany({ where: { websiteId: id } }),
+      prisma.integration.deleteMany({ where: { websiteId: id } }),
+      prisma.googleConnection.deleteMany({ where: { websiteId: id } }),
+      prisma.publishingConnection.deleteMany({ where: { websiteId: id } }),
+      // Content references PageRecord, so it must go first.
+      prisma.content.deleteMany({ where: { websiteId: id } }),
+      prisma.pageRecord.deleteMany({ where: { websiteId: id } }),
+      prisma.website.deleteMany({ where: { id } }),
+    ]);
+  } catch (err) {
+    console.error(`[websites] Failed to delete website ${id}:`, err);
+    return NextResponse.json(
+      { error: { message: "Could not delete the website. No data was removed." } },
+      { status: 500 },
+    );
   }
 
   // 4. Also purge from local resilient store
