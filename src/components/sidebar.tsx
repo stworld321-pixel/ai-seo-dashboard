@@ -17,6 +17,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Radar,
   Search,
   Settings,
   Share2,
@@ -64,6 +65,7 @@ const GROUPS: Group[] = [
       { href: "/performance/search-console", label: "SEO Overview", icon: Search },
       { href: "/seo/keywords", label: "Keywords", icon: Target },
       { href: "/seo/pages", label: "Pages", icon: FileText },
+      { href: "/seo/indexing", label: "Indexing", icon: Radar },
       { href: "/seo/technical", label: "Technical Audit", icon: Wrench },
       { href: "/seo/opportunities", label: "Content Opportunities", icon: Sparkles },
       { href: "/content/generator", label: "Blog & Brief Generator", icon: FileText },
@@ -162,11 +164,11 @@ export function Sidebar() {
 
   function buildHref(baseHref: string): string {
     if (baseHref === "/onboarding" || baseHref === "/websites") return baseHref;
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      const w = sp.get("website");
-      if (w) return `${baseHref}?website=${encodeURIComponent(w)}`;
-    }
+    // Must come from useSearchParams, not window.location: reading `window`
+    // during render makes the server emit a bare href and the client a
+    // "?website=..." one, so every link's href mismatches on hydration.
+    const w = searchParams.get("website");
+    if (w) return `${baseHref}?website=${encodeURIComponent(w)}`;
     return baseHref;
   }
 

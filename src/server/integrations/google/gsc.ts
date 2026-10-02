@@ -21,6 +21,40 @@ export type GscSyncResult = {
   error?: string;
 };
 
+/**
+ * The verified Search Console property to query for a website: an explicitly
+ * selected property, else the one Google reports for this domain, else the raw
+ * site URL as a last resort. Shared by the sync engine and URL Inspection.
+ */
+export async function resolveGscProperty(
+  websiteId: string,
+  accessToken: string,
+): Promise<string | null> {
+  const website = await prisma.website.findUnique({
+    where: { id: websiteId },
+    include: { gscProperties: { where: { isSelected: true } } },
+  });
+  if (!website) return null;
+
+  let selected = website.gscProperties?.[0]?.propertyUrl || website.gscProperty || website.url;
+
+  try {
+    const rawUrl = website.url.startsWith("http") ? website.url : `https://${website.url}`;
+    const domain = new URL(rawUrl.endsWith("/") ? rawUrl : `${rawUrl}/`).hostname
+      .replace(/^www\./, "")
+      .toLowerCase();
+
+    // Auto-discover verified GSC property (e.g. sc-domain:domain or exact URL prefix)
+    const allProps = await fetchGoogleSearchConsoleProperties(accessToken).catch(() => []);
+    const match = allProps.find((p) => p.siteUrl.toLowerCase().includes(domain));
+    if (match) selected = match.siteUrl;
+  } catch {
+    // Keep the fallback
+  }
+
+  return selected;
+}
+
 export async function syncDirectGoogleSearchConsole(
   websiteId: string,
   days: number = 90,
@@ -47,24 +81,7 @@ export async function syncDirectGoogleSearchConsole(
     };
   }
 
-  let selectedProperty =
-    website.gscProperties?.[0]?.propertyUrl || website.gscProperty || website.url;
-
-  try {
-    const rawUrl = website.url.startsWith("http") ? website.url : `https://${website.url}`;
-    const domain = new URL(rawUrl.endsWith("/") ? rawUrl : `${rawUrl}/`).hostname
-      .replace(/^www\./, "")
-      .toLowerCase();
-
-    // Auto-discover verified GSC property (e.g. sc-domain:domain or exact URL prefix)
-    const allProps = await fetchGoogleSearchConsoleProperties(accessToken).catch(() => []);
-    const match = allProps.find((p) => p.siteUrl.toLowerCase().includes(domain));
-    if (match) {
-      selectedProperty = match.siteUrl;
-    }
-  } catch {
-    // Keep selectedProperty as fallback
-  }
+  const selectedProperty = (await resolveGscProperty(websiteId, accessToken)) ?? website.url;
 
   // Calculate start and end date (90 days window by default, wide enough for complete baseline)
   const end = new Date();

@@ -5,6 +5,7 @@
  * - https://www.googleapis.com/auth/webmasters.readonly (Search Console)
  * - https://www.googleapis.com/auth/analytics.readonly (Google Analytics 4)
  * - https://www.googleapis.com/auth/userinfo.email (Account Identification)
+ * - https://www.googleapis.com/auth/indexing (Indexing API URL submission)
  *
  * Security:
  * - AES-256-GCM encryption at rest for tokens
@@ -26,6 +27,9 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/webmasters.readonly",
   "https://www.googleapis.com/auth/analytics.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
+  // Submit URLs to the Indexing API. Connections made before this scope was
+  // added keep working for reads; indexing submissions 403 until reconnect.
+  "https://www.googleapis.com/auth/indexing",
 ];
 
 export function getGoogleClientCredentials(): { clientId: string; clientSecret: string } {
