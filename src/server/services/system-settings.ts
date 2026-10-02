@@ -328,8 +328,17 @@ export async function getSystemSettingValue(key: string): Promise<string> {
           const packedHex = val.slice(4);
           const buf = Buffer.from(packedHex, "hex");
           val = decrypt({ cipher: buf });
-        } catch {
-          // fallback
+        } catch (err) {
+          // Never fall through with the ciphertext still in `val`: callers treat
+          // this as a credential and would send "ENC:…" to a third-party API,
+          // producing an unrelated parse error from their side instead of a
+          // readable failure here. Empty means "no credential configured", which
+          // every caller already handles.
+          console.error(
+            `[SystemSettings] Could not decrypt "${key}" — check ENCRYPTION_KEY has not changed since it was saved.`,
+            err,
+          );
+          return "";
         }
       }
     }
@@ -337,6 +346,21 @@ export async function getSystemSettingValue(key: string): Promise<string> {
   } catch {
     return DEFAULT_SYSTEM_SETTINGS[key]?.value ?? "";
   }
+}
+
+/**
+ * Whether an incoming value for a secret means "leave the stored one alone".
+ *
+ * Two cases count as "no new value": an empty box (the admin UI never prefills
+ * secrets, so empty is the normal state for an already-configured key) and a
+ * value still carrying the display mask. Without the empty case, saving the
+ * settings form would wipe every secret the admin did not retype; without the
+ * mask case, a pasted value that kept the mask would overwrite a good secret
+ * with unusable text.
+ */
+export function shouldKeepStoredSecret(key: string, value: string): boolean {
+  if (!SECRET_KEYS.has(key)) return false;
+  return value.trim() === "" || value.includes("••••••••");
 }
 
 /**
@@ -350,8 +374,7 @@ export async function updateSystemSettings(
   for (const [key, value] of Object.entries(updates)) {
     if (value === undefined || value === null) continue;
 
-    // Skip updating secrets if user didn't change the masked string
-    if (SECRET_KEYS.has(key) && value.includes("••••••••")) {
+    if (shouldKeepStoredSecret(key, value)) {
       continue;
     }
 

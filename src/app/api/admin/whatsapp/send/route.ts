@@ -67,19 +67,17 @@ export async function POST(request: Request) {
           sentAt: new Date().toISOString(),
         });
       } else {
-        // Simulated / Sandbox development mode dispatch
-        return NextResponse.json({
-          ok: true,
-          simulated: true,
-          provider: "twilio_sandbox",
-          messageId: `sim_wa_${Date.now()}`,
-          status: "delivered (sandbox simulated)",
-          to: formattedTo,
-          from: formattedFrom,
-          body: message,
-          sentAt: new Date().toISOString(),
-          note: "Twilio credentials not fully provisioned in production. Simulated dispatch successful for testing.",
-        });
+        // Previously returned ok:true with a fake "sim_" id, so the console
+        // reported a delivery for a message that never left the server.
+        return NextResponse.json(
+          {
+            error: {
+              message:
+                "Twilio is the selected provider but its Account SID / Auth Token are missing or malformed (the SID must start with \"AC\"). Configure them in Admin → WhatsApp, or switch the provider to Meta.",
+            },
+          },
+          { status: 400 },
+        );
       }
     } else {
       // Meta Cloud API
@@ -89,7 +87,7 @@ export async function POST(request: Request) {
       const cleanPhone = to.replace(/[^\d]/g, "");
 
       if (metaToken && phoneId) {
-        const res = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
+        const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${metaToken}`,
@@ -106,8 +104,17 @@ export async function POST(request: Request) {
         const data = await res.json().catch(() => null);
 
         if (!res.ok) {
+          const metaMessage = data?.error?.message || `Meta Cloud API error HTTP ${res.status}`;
+          // Meta says a bare "Authorization Error" (code 100) both when the token
+          // is wrong and when the System User simply has no WhatsApp Business
+          // Account assigned to it — by far the more common cause, and impossible
+          // to guess from the message alone.
+          const hint =
+            data?.error?.code === 100
+              ? " — if the token itself tests fine, the System User behind it likely has no WhatsApp Business Account assigned. In Meta Business Settings assign the WABA to the System User with full control, then generate a NEW token (existing tokens do not pick up newly assigned assets)."
+              : "";
           return NextResponse.json(
-            { error: { message: data?.error?.message || `Meta Cloud API error HTTP ${res.status}` } },
+            { error: { message: `${metaMessage}${hint}`, code: data?.error?.code } },
             { status: 400 },
           );
         }
@@ -121,15 +128,15 @@ export async function POST(request: Request) {
           sentAt: new Date().toISOString(),
         });
       } else {
-        return NextResponse.json({
-          ok: true,
-          simulated: true,
-          provider: "meta_sandbox",
-          messageId: `sim_meta_${Date.now()}`,
-          status: "delivered (sandbox simulated)",
-          to: cleanPhone,
-          sentAt: new Date().toISOString(),
-        });
+        return NextResponse.json(
+          {
+            error: {
+              message:
+                "Meta is the selected provider but the Phone Number ID or Access Token is missing. Add both in Admin → WhatsApp and run Test Gateway first.",
+            },
+          },
+          { status: 400 },
+        );
       }
     }
   } catch (err: any) {

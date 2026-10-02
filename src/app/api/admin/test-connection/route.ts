@@ -221,9 +221,11 @@ export async function POST(request: Request) {
     }
 
     if (type === "whatsapp") {
-      const provider = (await getSystemSettingValue("whatsapp_provider")) || "twilio";
+      // Honour the provider the admin picked in the form; fall back to what is stored.
+      // (This used to shadow the outer `provider`, so Meta could never be tested.)
+      const waProvider = provider || (await getSystemSettingValue("whatsapp_provider")) || "twilio";
 
-      if (provider === "twilio") {
+      if (waProvider === "twilio") {
         const sid = (await getSystemSettingValue("whatsapp_account_sid")) || process.env.TWILIO_ACCOUNT_SID;
         const token = (await getSystemSettingValue("whatsapp_auth_token")) || process.env.TWILIO_AUTH_TOKEN;
 
@@ -263,15 +265,70 @@ export async function POST(request: Request) {
           return NextResponse.json({
             ok: false,
             latencyMs: Date.now() - startTime,
-            message: "Meta WhatsApp Cloud API requires Phone Number ID and Access Token.",
+            message:
+              "Meta WhatsApp Cloud API requires both a Phone Number ID and an Access Token. Save the settings, then test again.",
           });
+        }
+
+        // Actually call Graph rather than just checking the fields are non-empty:
+        // this verifies the token, the phone number ID, and that the two belong together.
+        const res = await fetch(
+          `https://graph.facebook.com/v21.0/${encodeURIComponent(phoneId)}?fields=verified_name,display_phone_number,quality_rating`,
+          { headers: { Authorization: `Bearer ${metaToken}` } },
+        );
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          // Graph reports "nonexisting field (verified_name)" when the id is a real
+          // object the token can see but NOT a phone number — almost always the App
+          // ID or the WhatsApp Business Account ID pasted into the wrong box.
+          const wrongNodeType = /nonexisting field \(verified_name\)/i.test(
+            data?.error?.message ?? "",
+          );
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            provider: "meta",
+            message: wrongNodeType
+              ? `The Phone Number ID "${phoneId}" is not a WhatsApp phone number — it looks like an App ID or WhatsApp Business Account ID. Copy the ID shown directly beneath the sender number in Meta → WhatsApp → API Setup.`
+              : data?.error?.message || `Meta Graph API returned HTTP ${res.status}`,
+          });
+        }
+
+        // Reading the number only proves the token can SEE it. Sending additionally
+        // requires the System User to have the WhatsApp Business Account assigned as
+        // an asset. Check that too, so a green test actually means "can send".
+        // Treat anything other than a definitive empty list as inconclusive: user
+        // tokens (not system users) have no such edge and must not fail the test.
+        try {
+          const meRes = await fetch("https://graph.facebook.com/v21.0/me?fields=id", {
+            headers: { Authorization: `Bearer ${metaToken}` },
+          });
+          const me = await meRes.json().catch(() => null);
+          if (meRes.ok && me?.id) {
+            const wabaRes = await fetch(
+              `https://graph.facebook.com/v21.0/${me.id}/assigned_whatsapp_business_accounts?fields=id`,
+              { headers: { Authorization: `Bearer ${metaToken}` } },
+            );
+            const waba = await wabaRes.json().catch(() => null);
+            if (wabaRes.ok && Array.isArray(waba?.data) && waba.data.length === 0) {
+              return NextResponse.json({
+                ok: false,
+                latencyMs: Date.now() - startTime,
+                provider: "meta",
+                message: `Token reads "${data?.verified_name ?? phoneId}" fine, but no WhatsApp Business Account is assigned to this System User, so sending will fail with "Authorization Error". In Meta Business Settings → Users → System Users → Add Assets → WhatsApp Accounts, assign the WABA with Full control, then generate a NEW token (existing tokens never pick up newly assigned assets).`,
+              });
+            }
+          }
+        } catch {
+          // Network/shape problem on an advisory check: fall through to success.
         }
 
         return NextResponse.json({
           ok: true,
           latencyMs: Date.now() - startTime,
           provider: "meta",
-          message: "Meta WhatsApp Cloud API configuration validated.",
+          message: `Meta WhatsApp Cloud API verified! Sender "${data?.verified_name ?? "Unknown"}" (${data?.display_phone_number ?? phoneId}), quality rating: ${data?.quality_rating ?? "N/A"}.`,
         });
       }
     }

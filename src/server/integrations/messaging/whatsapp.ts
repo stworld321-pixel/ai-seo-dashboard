@@ -32,7 +32,14 @@ export async function sendWhatsAppMessage(payload: WhatsAppPayload): Promise<{
   const authToken = payload.config?.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = payload.config?.twilioFromNumber || process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
 
-  if (accountSid && authToken) {
+  // Honour an explicit gateway choice. Without this, a stray TWILIO_ACCOUNT_SID in
+  // the environment silently hijacks every send even when Meta is the configured
+  // provider, and the admin never learns why their Meta setup appears unused.
+  if (gateway === "twilio" && !(accountSid && authToken)) {
+    return { success: false, error: "Twilio is selected but its Account SID / Auth Token are not configured." };
+  }
+
+  if (gateway !== "meta" && accountSid && authToken) {
     try {
       const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
       const body = new URLSearchParams({
@@ -92,10 +99,15 @@ export async function sendWhatsAppMessage(payload: WhatsAppPayload): Promise<{
     }
   }
 
-  // 3. Fallback: Log and simulate successful delivery
-  console.log(`[WhatsApp Gateway Simulated Delivery to ${cleanTo}]:\n${payload.message}`);
+  if (gateway === "meta") {
+    return { success: false, error: "Meta WhatsApp Cloud API is selected but its Phone Number ID / Access Token are not configured." };
+  }
+
+  // 3. Nothing is configured. Report that honestly: returning success here used to
+  // make callers (digests, alerts, the admin console) record a delivery that never
+  // happened, which is worse than a visible failure.
   return {
-    success: true,
-    messageId: `sim_${Date.now()}`,
+    success: false,
+    error: "No WhatsApp gateway is configured. Add Twilio or Meta credentials in Admin → WhatsApp.",
   };
 }

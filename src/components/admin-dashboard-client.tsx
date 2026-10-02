@@ -137,10 +137,22 @@ export function AdminDashboardClient({
   const [settings, setSettings] = useState<Record<string, string>>(() => {
     const s: Record<string, string> = {};
     for (const [k, v] of Object.entries(initialSettings)) {
-      s[k] = v.value;
+      // Secrets arrive masked ("abcd••••••••wxyz"). Seeding that into a
+      // type="password" box is a trap: the mask is invisible, so typing or
+      // pasting leaves the bullet run in the value and the server skips the
+      // write as "unchanged" — the new secret is silently discarded. Keep
+      // secret boxes empty; empty means "leave the stored value alone".
+      s[k] = v.isSecret ? "" : v.value;
     }
     return s;
   });
+
+  /** Secret keys that already have a stored value, for the "saved" placeholder. */
+  const configuredSecrets = new Set(
+    Object.entries(initialSettings)
+      .filter(([, v]) => v.isSecret && v.value)
+      .map(([k]) => k),
+  );
 
   // Filters & State
   const [userSearch, setUserSearch] = useState("");
@@ -201,6 +213,15 @@ export function AdminDashboardClient({
     setTestingType(provider ? `${type}-${provider}` : type);
     setTestResult(null);
     try {
+      // The test runs server-side against STORED settings, so persist the form
+      // first. Without this, editing a provider or key and hitting Test silently
+      // tests the previously saved values instead of what is on screen.
+      await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+
       const res = await fetch("/api/admin/test-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1512,11 +1533,11 @@ export function AdminDashboardClient({
 
                 <button
                   type="button"
-                  disabled={testingType === "whatsapp"}
-                  onClick={() => runConnectionTest("whatsapp")}
+                  disabled={testingType?.startsWith("whatsapp") ?? false}
+                  onClick={() => runConnectionTest("whatsapp", settings.whatsapp_provider || "twilio")}
                   className="px-2.5 py-1 text-[11px] rounded font-medium border border-emerald-200 dark:border-emerald-800 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-1"
                 >
-                  <RefreshCw size={11} className={testingType === "whatsapp" ? "animate-spin" : ""} />
+                  <RefreshCw size={11} className={testingType?.startsWith("whatsapp") ? "animate-spin" : ""} />
                   Test Gateway
                 </button>
               </div>
@@ -1595,12 +1616,17 @@ export function AdminDashboardClient({
                     <div>
                       <label className="block text-[11px] font-medium text-[var(--color-muted)] mb-1">
                         System User Permanent Access Token
+                        {configuredSecrets.has("whatsapp_meta_token") && (
+                          <span className="ml-1.5 font-normal text-emerald-600 dark:text-emerald-400">
+                            — a token is saved; type a new one to replace it
+                          </span>
+                        )}
                       </label>
                       <input
                         type="password"
                         value={settings.whatsapp_meta_token || ""}
                         onChange={(e) => handleSettingChange("whatsapp_meta_token", e.target.value)}
-                        placeholder="EAAB••••••••••••"
+                        placeholder="EAA… (starts with EAA, ~200 characters, no dots)"
                         className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
                       />
                     </div>
