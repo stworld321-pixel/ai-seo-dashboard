@@ -25,6 +25,9 @@ export async function POST(request: Request) {
     model?: string;
     publishLive?: boolean;
     contentId?: string;
+    categoryIds?: number[];
+    /** ISO instant; when in the future WordPress schedules the post itself. */
+    scheduledAt?: string;
   };
 
   const website = await getDefaultWebsite(body.websiteId);
@@ -33,6 +36,28 @@ export async function POST(request: Request) {
       { error: { code: "NOT_FOUND", message: "No website connected" } },
       { status: 404 },
     );
+  }
+
+  const categoryIds = Array.isArray(body.categoryIds)
+    ? body.categoryIds.filter((n): n is number => Number.isInteger(n) && n > 0)
+    : undefined;
+
+  let scheduledAt: Date | undefined;
+  if (body.scheduledAt) {
+    const parsed = new Date(body.scheduledAt);
+    if (Number.isNaN(parsed.getTime())) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "scheduledAt is not a valid date" } },
+        { status: 400 },
+      );
+    }
+    if (parsed.getTime() <= Date.now()) {
+      return NextResponse.json(
+        { error: { code: "BAD_REQUEST", message: "Pick a publish time in the future, or publish now instead." } },
+        { status: 400 },
+      );
+    }
+    scheduledAt = parsed;
   }
 
   // Action: publish an existing generated draft directly to live WordPress
@@ -70,14 +95,20 @@ export async function POST(request: Request) {
         ),
         focusKeyword: existing.primaryKeyword ?? undefined,
         status: "publish",
+        categories: categoryIds,
+        scheduledAt,
       });
 
+      // ponytail: a scheduled post stays DRAFT here and WordPress owns the clock,
+      // so "what is scheduled" must be read from the CMS. Add a SCHEDULED
+      // ContentStatus + scheduledAt column if that list is needed in-app.
+      const isScheduled = wpPost.status === "future";
       const updated = await prisma.content.update({
         where: { id: existing.id },
         data: {
-          status: "PUBLISHED",
+          status: isScheduled ? "DRAFT" : "PUBLISHED",
           publishedUrl: wpPost.url,
-          publishedAt: new Date(),
+          publishedAt: isScheduled ? null : new Date(),
         },
       });
 
@@ -86,7 +117,9 @@ export async function POST(request: Request) {
           websiteId: website.id,
           agent: "content-writer",
           level: "info",
-          message: `Published SEO+AEO+GEO blog post "${existing.title}" live to WordPress (#${wpPost.id} → ${wpPost.url}).`,
+          message: isScheduled
+            ? `Scheduled SEO+AEO+GEO blog post "${existing.title}" on WordPress for ${wpPost.scheduledAt} (#${wpPost.id}).`
+            : `Published SEO+AEO+GEO blog post "${existing.title}" live to WordPress (#${wpPost.id} → ${wpPost.url}).`,
         },
       });
 
@@ -98,6 +131,8 @@ export async function POST(request: Request) {
             id: wpPost.id,
             url: wpPost.url,
             slug: wpPost.slug,
+            status: wpPost.status,
+            scheduledAt: wpPost.scheduledAt ?? null,
           },
         },
       });
@@ -196,6 +231,8 @@ export async function POST(request: Request) {
     id?: string;
     url?: string;
     slug?: string;
+    status?: string;
+    scheduledAt?: string | null;
     error?: string;
   } | null = null;
 
@@ -211,12 +248,16 @@ export async function POST(request: Request) {
         metaDescription: draft.metaDescription,
         focusKeyword: keyword,
         status: "publish",
+        categories: categoryIds,
+        scheduledAt,
       });
       publishedLive = {
         ok: true,
         id: wpPost.id,
         url: wpPost.url,
         slug: wpPost.slug,
+        status: wpPost.status,
+        scheduledAt: wpPost.scheduledAt ?? null,
       };
     } catch (err) {
       publishedLive = {
@@ -226,8 +267,11 @@ export async function POST(request: Request) {
     }
   }
 
+  // A scheduled post is not live yet, so it must not be recorded as PUBLISHED.
   const contentStatus = publishedLive?.ok
-    ? "PUBLISHED"
+    ? publishedLive.status === "future"
+      ? "APPROVED"
+      : "PUBLISHED"
     : draft.qaReport.qaPassed
       ? "AWAITING_APPROVAL"
       : "QA_FAILED";
@@ -249,7 +293,9 @@ export async function POST(request: Request) {
       qaReport: draft.qaReport,
       authorAgent: draft.authorAgent,
       publishedUrl: publishedLive?.url ?? targetUrl,
-      ...(publishedLive?.ok ? { publishedAt: new Date() } : {}),
+      ...(publishedLive?.ok && publishedLive.status !== "future"
+        ? { publishedAt: new Date() }
+        : {}),
     },
   });
 

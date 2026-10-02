@@ -99,6 +99,17 @@ export function ContentGeneratorClient({
   const [publishingLive, setPublishingLive] = useState(false);
   const [copiedType, setCopiedType] = useState<string | null>(null);
 
+  // Blog categories on the connected site, loaded on demand.
+  const [categories, setCategories] = useState<Array<{ id: number; name: string; count: number }>>([]);
+  const [categoryIds, setCategoryIds] = useState<number[]>([]);
+  const [categoriesState, setCategoriesState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [newCategory, setNewCategory] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+
+  // Empty means "publish immediately"; a future value hands scheduling to WordPress.
+  const [scheduledAt, setScheduledAt] = useState("");
+
   const [result, setResult] = useState<{
     content: {
       id: string;
@@ -120,6 +131,8 @@ export function ContentGeneratorClient({
       id?: string;
       url?: string;
       slug?: string;
+      status?: string;
+      scheduledAt?: string | null;
       error?: string;
     } | null;
   } | null>(null);
@@ -177,6 +190,67 @@ export function ContentGeneratorClient({
     URL.revokeObjectURL(url);
   }
 
+  /** The datetime-local value is local wall time; send an absolute instant. */
+  function scheduledAtIso(): string | undefined {
+    if (!scheduledAt) return undefined;
+    const d = new Date(scheduledAt);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  }
+
+  async function loadCategories() {
+    if (categoriesState === "loading") return;
+    setCategoriesState("loading");
+    setCategoriesError(null);
+    try {
+      const res = await fetch(`/api/content/categories?website=${encodeURIComponent(websiteId)}`);
+      const json = await res.json();
+      if (!res.ok) {
+        setCategoriesError(json.error?.message ?? "Could not load categories.");
+        setCategoriesState("error");
+        return;
+      }
+      setCategories(json.data?.categories ?? []);
+      setCategoriesState("ready");
+    } catch (err) {
+      setCategoriesError(err instanceof Error ? err.message : "Could not load categories.");
+      setCategoriesState("error");
+    }
+  }
+
+  async function handleCreateCategory() {
+    const name = newCategory.trim();
+    if (!name || creatingCategory) return;
+    setCreatingCategory(true);
+    setCategoriesError(null);
+    try {
+      const res = await fetch("/api/content/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ websiteId, name }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setCategoriesError(json.error?.message ?? "Could not create the category.");
+        return;
+      }
+      const created = json.data.category as { id: number; name: string };
+      setCategories((prev) =>
+        prev.some((c) => c.id === created.id) ? prev : [...prev, { ...created, count: 0 }],
+      );
+      setCategoryIds((prev) => (prev.includes(created.id) ? prev : [...prev, created.id]));
+      setNewCategory("");
+      setCategoriesState("ready");
+    } catch (err) {
+      setCategoriesError(err instanceof Error ? err.message : "Could not create the category.");
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
+  function toggleCategory(id: number) {
+    setCategoryIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  }
+
   async function runGenerate(publishLive: boolean) {
     setLoading(true);
     setError(null);
@@ -200,6 +274,8 @@ export function ContentGeneratorClient({
           provider,
           model: modelName.trim(),
           publishLive,
+          categoryIds: categoryIds.length ? categoryIds : undefined,
+          scheduledAt: scheduledAtIso(),
         }),
       });
       const contentType = res.headers.get("content-type") || "";
@@ -240,6 +316,8 @@ export function ContentGeneratorClient({
           websiteId,
           contentId: result.content.id,
           publishLive: true,
+          categoryIds: categoryIds.length ? categoryIds : undefined,
+          scheduledAt: scheduledAtIso(),
         }),
       });
       const json = await res.json();
@@ -252,7 +330,7 @@ export function ContentGeneratorClient({
                 ...prev,
                 content: {
                   ...prev.content,
-                  status: "PUBLISHED",
+                  status: json.data.publishedLive.status === "future" ? "APPROVED" : "PUBLISHED",
                   publishedUrl: json.data.publishedLive.url,
                 },
                 publishedLive: json.data.publishedLive,
@@ -459,6 +537,101 @@ export function ContentGeneratorClient({
             </div>
           </div>
 
+          {/* Blog category + schedule: both apply to live publishing only. */}
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]/40 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                Blog Category
+              </label>
+              {categoriesState === "idle" ? (
+                <button
+                  type="button"
+                  onClick={() => void loadCategories()}
+                  className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-medium hover:bg-[var(--color-surface-muted)]"
+                >
+                  Load from site
+                </button>
+              ) : (
+                <span className="text-[11px] text-[var(--color-muted)]">
+                  {categoriesState === "loading"
+                    ? "Loading…"
+                    : categoryIds.length > 0
+                      ? `${categoryIds.length} selected`
+                      : "Uncategorised"}
+                </span>
+              )}
+            </div>
+
+            {categoriesError ? (
+              <p className="text-[11px] font-medium text-[var(--color-danger)]">{categoriesError}</p>
+            ) : null}
+
+            {categories.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {categories.map((c) => {
+                  const on = categoryIds.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleCategory(c.id)}
+                      aria-pressed={on}
+                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition ${
+                        on
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]"
+                          : "border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-muted)]"
+                      }`}
+                    >
+                      {c.name}
+                      {c.count > 0 ? ` (${c.count})` : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleCreateCategory();
+                  }
+                }}
+                placeholder="Add a new category…"
+                className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs"
+              />
+              <button
+                type="button"
+                disabled={!newCategory.trim() || creatingCategory}
+                onClick={() => void handleCreateCategory()}
+                className="shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-semibold hover:bg-[var(--color-surface-muted)] disabled:opacity-50"
+              >
+                {creatingCategory ? "Adding…" : "Add"}
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                Schedule Publish
+              </label>
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs"
+              />
+              <p className="mt-1 text-[11px] text-[var(--color-muted)]">
+                {scheduledAt
+                  ? "WordPress will publish the post at this time."
+                  : "Leave empty to publish immediately."}
+              </p>
+            </div>
+          </div>
+
           {error ? <p className="text-xs font-medium text-[var(--color-danger)]">{error}</p> : null}
 
           <div className="grid gap-2 sm:grid-cols-2">
@@ -475,7 +648,9 @@ export function ContentGeneratorClient({
               onClick={() => void runGenerate(true)}
               className="w-full rounded-md border border-[var(--color-success)] bg-[var(--color-success-bg)] px-4 py-2.5 text-xs font-semibold text-[var(--color-success)] shadow-sm transition hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? "Publishing..." : "Generate & Publish Live ↗"}
+              {loading
+                ? scheduledAt ? "Scheduling..." : "Publishing..."
+                : scheduledAt ? "Generate & Schedule ↗" : "Generate & Publish Live ↗"}
             </button>
           </div>
         </form>
@@ -499,7 +674,9 @@ export function ContentGeneratorClient({
                     rel="noreferrer"
                     className="rounded-md bg-[var(--color-success-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--color-success)] hover:underline"
                   >
-                    Live on Website ↗
+                    {result.publishedLive.status === "future"
+                      ? `Scheduled for ${new Date(result.publishedLive.scheduledAt ?? "").toLocaleString()} ↗`
+                      : "Live on Website ↗"}
                   </a>
                 ) : (
                   <button
@@ -508,13 +685,17 @@ export function ContentGeneratorClient({
                     onClick={handlePublishExistingLive}
                     className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--color-primary-fg)] hover:opacity-90 disabled:opacity-50"
                   >
-                    {publishingLive ? "Publishing..." : "Publish to WordPress ↗"}
+                    {publishingLive
+                      ? scheduledAt ? "Scheduling..." : "Publishing..."
+                      : scheduledAt ? "Schedule on WordPress ↗" : "Publish to WordPress ↗"}
                   </button>
                 )}
                 <StatusBadge
                   status={
                     result.publishedLive?.ok
-                      ? "Published Live"
+                      ? result.publishedLive.status === "future"
+                        ? "Scheduled"
+                        : "Published Live"
                       : result.qaReport.qaPassed
                         ? `Page-1 Ready (${result.qaReport.score}/100)`
                         : "Needs Review"

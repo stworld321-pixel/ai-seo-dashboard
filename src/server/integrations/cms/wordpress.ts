@@ -598,7 +598,14 @@ export class WordPressProvider implements CmsProvider {
     metaDescription?: string;
     focusKeyword?: string;
     status?: "publish" | "draft";
-  }): Promise<{ id: string; url: string; slug: string; status: string }> {
+    /** WordPress category term IDs to file the post under. */
+    categories?: number[];
+    /**
+     * When set to a future instant, WordPress itself schedules the post
+     * (status "future"). No cron is needed on our side — the CMS owns the clock.
+     */
+    scheduledAt?: Date;
+  }): Promise<{ id: string; url: string; slug: string; status: string; scheduledAt?: string }> {
     if (!this.authed) {
       throw new Error(
         "WordPress writes require an application password. Set WP_USERNAME and WP_APP_PASSWORD.",
@@ -636,15 +643,23 @@ export class WordPressProvider implements CmsProvider {
       existingId = null;
     }
 
+    // A future date turns this into a WordPress-scheduled post. `date_gmt` takes
+    // ISO8601 without a zone suffix and is interpreted as UTC, which avoids
+    // depending on the site's configured timezone.
+    const isScheduled = Boolean(params.scheduledAt && params.scheduledAt.getTime() > Date.now());
+    const status = isScheduled ? "future" : (params.status ?? "publish");
+
     const endpoint = existingId ? `/wp/v2/posts/${existingId}` : "/wp/v2/posts";
     const created = await this.request<WpItem>(endpoint, {
       method: "POST",
       body: JSON.stringify({
         title: params.title,
         slug: cleanSlug,
-        status: params.status ?? "publish",
+        status,
         content: params.htmlContent,
         ...(params.excerpt ? { excerpt: params.excerpt } : {}),
+        ...(isScheduled ? { date_gmt: params.scheduledAt!.toISOString().slice(0, 19) } : {}),
+        ...(params.categories?.length ? { categories: params.categories } : {}),
         meta,
       }),
     });
@@ -653,8 +668,46 @@ export class WordPressProvider implements CmsProvider {
       id: String(created.id),
       url: created.link || `${this.base}/${cleanSlug}/`,
       slug: created.slug || cleanSlug,
-      status: params.status ?? "publish",
+      status,
+      ...(isScheduled ? { scheduledAt: params.scheduledAt!.toISOString() } : {}),
     };
+  }
+
+  /** Blog categories available on the site, for the generator's category picker. */
+  async listCategories(): Promise<Array<{ id: number; name: string; count: number; slug: string }>> {
+    const terms = await this.request<Array<{ id: number; name: string; count?: number; slug?: string }>>(
+      "/wp/v2/categories?per_page=100&orderby=name&order=asc",
+    );
+    return (terms ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      count: t.count ?? 0,
+      slug: t.slug ?? "",
+    }));
+  }
+
+  /** Creates a blog category, or returns the existing one if the slug is taken. */
+  async createCategory(name: string): Promise<{ id: number; name: string; slug: string }> {
+    if (!this.authed) {
+      throw new Error(
+        "Creating a category requires an application password. Set WP_USERNAME and WP_APP_PASSWORD.",
+      );
+    }
+
+    try {
+      const created = await this.request<{ id: number; name: string; slug?: string }>("/wp/v2/categories", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      return { id: created.id, name: created.name, slug: created.slug ?? "" };
+    } catch (err) {
+      // WordPress replies 400 term_exists for a duplicate; reuse it rather than failing.
+      const existing = (await this.listCategories()).find(
+        (c) => c.name.toLowerCase() === name.trim().toLowerCase(),
+      );
+      if (existing) return { id: existing.id, name: existing.name, slug: existing.slug };
+      throw err;
+    }
   }
 
   /**

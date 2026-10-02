@@ -350,18 +350,13 @@ export async function applyInternalLinkToLiveWordPress(params: {
   return result;
 }
 
-export async function publishBlogPostToLiveWordPress(params: {
-  websiteId: string;
-  title: string;
-  slug?: string;
-  htmlContent: string;
-  excerpt?: string;
-  seoTitle?: string;
-  metaDescription?: string;
-  focusKeyword?: string;
-  status?: "publish" | "draft";
-}): Promise<{ id: string; url: string; slug: string; status: string }> {
-  const website = await prisma.website.findUnique({ where: { id: params.websiteId } });
+/**
+ * Builds an authenticated WordPress client for a website, resolving credentials
+ * from the environment first and then the encrypted CMS integration record.
+ * Shared by publishing and category management so both see the same site.
+ */
+export async function getWordPressProvider(websiteId: string): Promise<WordPressProvider> {
+  const website = await prisma.website.findUnique({ where: { id: websiteId } });
   const cleanSiteUrl = (website?.url || process.env.WP_URL || "").replace(
     /\/+$/,
     "",
@@ -371,7 +366,7 @@ export async function publishBlogPostToLiveWordPress(params: {
   let appPassword = process.env.WP_APP_PASSWORD?.trim() || undefined;
 
   const existingCms = await prisma.integration.findFirst({
-    where: { websiteId: params.websiteId, kind: "CMS" },
+    where: { websiteId, kind: "CMS" },
   });
 
   if (
@@ -393,12 +388,28 @@ export async function publishBlogPostToLiveWordPress(params: {
     }
   }
 
-  const wp = new WordPressProvider({
+  return new WordPressProvider({
     siteUrl: cleanSiteUrl,
     username,
     appPassword,
     timeoutMs: 25_000,
   });
+}
+
+export async function publishBlogPostToLiveWordPress(params: {
+  websiteId: string;
+  title: string;
+  slug?: string;
+  htmlContent: string;
+  excerpt?: string;
+  seoTitle?: string;
+  metaDescription?: string;
+  focusKeyword?: string;
+  status?: "publish" | "draft";
+  categories?: number[];
+  scheduledAt?: Date;
+}): Promise<{ id: string; url: string; slug: string; status: string; scheduledAt?: string }> {
+  const wp = await getWordPressProvider(params.websiteId);
 
   return wp.publishBlogPost({
     title: params.title,
@@ -409,7 +420,17 @@ export async function publishBlogPostToLiveWordPress(params: {
     metaDescription: params.metaDescription,
     focusKeyword: params.focusKeyword,
     status: params.status ?? "publish",
+    categories: params.categories,
+    scheduledAt: params.scheduledAt,
   });
+}
+
+export async function listWordPressCategories(websiteId: string) {
+  return (await getWordPressProvider(websiteId)).listCategories();
+}
+
+export async function createWordPressCategory(websiteId: string, name: string) {
+  return (await getWordPressProvider(websiteId)).createCategory(name);
 }
 
 
