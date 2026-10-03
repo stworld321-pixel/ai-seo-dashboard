@@ -91,7 +91,7 @@ export async function POST(request: Request) {
   const primaryWebsiteId = userWebsites[0]?.id ?? null;
 
   const ttlDays = rememberMe ? 30 : 1;
-  const token = createSessionToken(
+  const token = await createSessionToken(
     {
       userId: user.id,
       email: user.email,
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
         isAdmin: isSystemAdmin,
         role: isSystemAdmin ? "ADMIN" : "USER",
       },
-      redirectTo: primaryWebsiteId ? "/" : "/onboarding",
+      redirectTo: isSystemAdmin ? "/admin" : (primaryWebsiteId ? "/" : "/onboarding"),
     },
   });
 

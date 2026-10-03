@@ -81,7 +81,7 @@ export type Opportunity = {
   estimatedClicks: number | null;
   /** Human sentence explaining the detection, rendered in the UI. */
   why: string;
-  evidence: Record<string, number | string | null>;
+  evidence: Record<string, number | string | boolean | null>;
   recommendation: RecommendedAction[];
 };
 

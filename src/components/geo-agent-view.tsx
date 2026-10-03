@@ -16,6 +16,10 @@ import {
   Link2,
   ArrowRight,
   ExternalLink,
+  Check,
+  X,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { StatusBadge } from "./badges";
 import { GeoImplementModal, type GeoOpportunityItem } from "./geo-implement-modal";
@@ -28,11 +32,28 @@ interface GeoAgentViewProps {
 export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewProps) {
   const router = useRouter();
   const [opportunities, setOpportunities] = useState<GeoOpportunityItem[]>(initialOpportunities);
-  const [activeTab, setActiveTab] = useState<"all" | "schema" | "comparison" | "quick_answer" | "citation" | "done">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "open" | "schema" | "comparison" | "quick_answer" | "citation" | "done" | "dismissed">("open");
   const [searchQuery, setSearchQuery] = useState("");
   const [isRunningDiag, setIsRunningDiag] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedOpp, setSelectedOpp] = useState<GeoOpportunityItem | null>(null);
+
+  async function handleUpdateGeoStatus(oppId: string, status: "open" | "done" | "dismissed") {
+    try {
+      const res = await fetch("/api/geo/opportunities/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId: oppId, status }),
+      });
+      if (res.ok) {
+        setOpportunities((prev) =>
+          prev.map((o) => (o.id === oppId ? { ...o, status } : o)),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to update GEO opportunity status", err);
+    }
+  }
 
   async function handleRunDiagnostics() {
     setIsRunningDiag(true);
@@ -66,8 +87,11 @@ export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewPr
 
   const filteredOpps = opportunities.filter((opp) => {
     // Filter by tab
+    if (activeTab === "open" && (opp.status === "done" || opp.status === "dismissed")) return false;
     if (activeTab === "done" && opp.status !== "done") return false;
-    if (activeTab !== "done" && activeTab !== "all") {
+    if (activeTab === "dismissed" && opp.status !== "dismissed") return false;
+    if (activeTab !== "done" && activeTab !== "dismissed" && activeTab !== "all" && activeTab !== "open") {
+      if (opp.status === "dismissed") return false;
       if (activeTab === "schema" && !opp.gapType.includes("schema") && !opp.gapType.includes("entity")) return false;
       if (activeTab === "comparison" && !opp.gapType.includes("comparison")) return false;
       if (activeTab === "quick_answer" && !opp.gapType.includes("quick") && !opp.gapType.includes("faq")) return false;
@@ -86,11 +110,12 @@ export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewPr
     return true;
   });
 
-  const openCount = opportunities.filter((o) => o.status !== "done").length;
-  const schemaCount = opportunities.filter((o) => o.gapType.includes("schema") || o.gapType.includes("entity")).length;
-  const comparisonCount = opportunities.filter((o) => o.gapType.includes("comparison")).length;
-  const quickAnswerCount = opportunities.filter((o) => o.gapType.includes("quick") || o.gapType.includes("faq")).length;
+  const openCount = opportunities.filter((o) => o.status !== "done" && o.status !== "dismissed").length;
   const doneCount = opportunities.filter((o) => o.status === "done").length;
+  const dismissedCount = opportunities.filter((o) => o.status === "dismissed").length;
+  const schemaCount = opportunities.filter((o) => o.status !== "dismissed" && (o.gapType.includes("schema") || o.gapType.includes("entity"))).length;
+  const comparisonCount = opportunities.filter((o) => o.status !== "dismissed" && o.gapType.includes("comparison")).length;
+  const quickAnswerCount = opportunities.filter((o) => o.status !== "dismissed" && (o.gapType.includes("quick") || o.gapType.includes("faq"))).length;
 
   return (
     <div className="space-y-6">
@@ -168,14 +193,14 @@ export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewPr
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={() => setActiveTab("all")}
+            onClick={() => setActiveTab("open")}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              activeTab === "all"
+              activeTab === "open"
                 ? "bg-[var(--color-primary)] text-white"
                 : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             }`}
           >
-            All Gaps ({opportunities.length})
+            Open Gaps ({openCount})
           </button>
           <button
             type="button"
@@ -218,12 +243,35 @@ export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewPr
             onClick={() => setActiveTab("done")}
             className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
               activeTab === "done"
-                ? "bg-[var(--color-primary)] text-white"
+                ? "bg-emerald-600 text-white"
                 : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             }`}
           >
             <CheckCircle2 size={13} />
-            Implemented ({doneCount})
+            Done ({doneCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("dismissed")}
+            className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              activeTab === "dismissed"
+                ? "bg-gray-600 text-white"
+                : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+            }`}
+          >
+            <XCircle size={13} />
+            Dismissed ({dismissedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("all")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              activeTab === "all"
+                ? "bg-[var(--color-surface)] text-[var(--color-foreground)] border border-[var(--color-border)]"
+                : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+            }`}
+          >
+            All ({opportunities.length})
           </button>
         </div>
 
@@ -248,11 +296,12 @@ export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewPr
         ) : (
           filteredOpps.map((opp) => {
             const isDone = opp.status === "done";
+            const isDismissed = opp.status === "dismissed";
             return (
               <div
                 key={opp.id}
                 className={`p-4 transition-colors hover:bg-[var(--color-surface-muted)] ${
-                  isDone ? "opacity-70 bg-gray-50/50 dark:bg-gray-900/20" : ""
+                  isDone ? "opacity-70 bg-gray-50/50 dark:bg-gray-900/20" : isDismissed ? "opacity-50" : ""
                 }`}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -271,7 +320,13 @@ export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewPr
                           Implemented
                         </span>
                       )}
-                      <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
+                      {isDismissed && (
+                        <span className="inline-flex items-center gap-1 rounded bg-gray-500/10 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+                          <X size={12} />
+                          Dismissed
+                        </span>
+                      )}
+                      <h4 className={`text-sm font-semibold text-[var(--color-foreground)] ${isDismissed ? "line-through opacity-70" : ""}`}>
                         {opp.title}
                       </h4>
                     </div>
@@ -292,15 +347,61 @@ export function GeoAgentView({ websiteId, initialOpportunities }: GeoAgentViewPr
                     )}
                   </div>
 
-                  <div className="shrink-0 flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedOpp(opp)}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3.5 py-1.5 text-xs font-semibold text-[var(--color-primary-fg)] hover:opacity-90 transition-opacity shadow-sm"
-                    >
-                      <Sparkles size={13} />
-                      <span>{isDone ? "View Fix" : "🚀 Implement with AI"}</span>
-                    </button>
+                  <div className="shrink-0 flex items-center gap-1.5 pt-1">
+                    {!isDone && !isDismissed && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOpp(opp)}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--color-primary-fg)] hover:opacity-90 transition-opacity shadow-sm"
+                      >
+                        <Sparkles size={13} />
+                        <span>Implement</span>
+                      </button>
+                    )}
+
+                    {!isDone ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateGeoStatus(opp.id, "done")}
+                        className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                        title="Mark as Done"
+                      >
+                        <Check size={12} />
+                        <span>Done</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateGeoStatus(opp.id, "open")}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                        title="Reopen gap"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Reopen</span>
+                      </button>
+                    )}
+
+                    {!isDismissed ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateGeoStatus(opp.id, "dismissed")}
+                        className="inline-flex items-center gap-1 rounded border border-gray-500/20 bg-gray-500/5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                        title="Dismiss gap"
+                      >
+                        <X size={12} />
+                        <span>Dismiss</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateGeoStatus(opp.id, "open")}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                        title="Restore gap"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Restore</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

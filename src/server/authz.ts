@@ -9,7 +9,10 @@
  * dashboard. Admin is now decided by email address alone.
  */
 
-const DEFAULT_ADMIN_EMAIL = "suriyamanikandan4@gmail.com";
+const DEFAULT_ADMIN_EMAILS = [
+  "suriymanikandan4@gmail.com",
+  "suriyamanikandan4@gmail.com",
+];
 
 /** Admin addresses, from ADMIN_EMAILS (comma-separated) or the built-in default. */
 export function adminEmails(): string[] {
@@ -19,7 +22,7 @@ export function adminEmails(): string[] {
     .split(",")
     .map((e) => e.trim())
     .filter(Boolean);
-  return parsed.length > 0 ? parsed : [DEFAULT_ADMIN_EMAIL];
+  return parsed.length > 0 ? parsed : DEFAULT_ADMIN_EMAILS;
 }
 
 /**

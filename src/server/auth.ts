@@ -2,16 +2,19 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/server/db";
 import { isAdminEmail } from "@/server/authz";
+import {
+  SESSION_COOKIE_NAME,
+  type SessionPayload,
+  createSessionToken,
+  verifySessionToken,
+} from "@/lib/session";
 
-export const SESSION_COOKIE_NAME = "seo_session";
-
-function getSecret(): string {
-  return (
-    process.env.NEXTAUTH_SECRET ||
-    process.env.ENCRYPTION_KEY ||
-    "ai-seo-command-center-default-secret-key"
-  );
-}
+export {
+  SESSION_COOKIE_NAME,
+  type SessionPayload,
+  createSessionToken,
+  verifySessionToken,
+};
 
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -37,47 +40,6 @@ export function verifyPassword(password: string, storedHash: string | null | und
   }
 }
 
-export type SessionPayload = {
-  userId: string;
-  email: string;
-  name: string;
-  isAdmin?: boolean;
-  role?: string;
-  orgId?: string;
-  orgName?: string;
-  exp: number;
-};
-
-export function createSessionToken(payload: Omit<SessionPayload, "exp">, ttlDays = 30): string {
-  const fullPayload: SessionPayload = {
-    ...payload,
-    exp: Date.now() + ttlDays * 24 * 60 * 60 * 1000,
-  };
-  const dataB64 = Buffer.from(JSON.stringify(fullPayload), "utf8").toString("base64url");
-  const sig = crypto.createHmac("sha256", getSecret()).update(dataB64).digest("base64url");
-  return `${dataB64}.${sig}`;
-}
-
-export function verifySessionToken(token: string | undefined | null): SessionPayload | null {
-  if (!token || !token.includes(".")) return null;
-  const [dataB64, sig] = token.split(".");
-  if (!dataB64 || !sig) return null;
-  const expectedSig = crypto
-    .createHmac("sha256", getSecret())
-    .update(dataB64)
-    .digest("base64url");
-  if (sig !== expectedSig) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(dataB64, "base64url").toString("utf8")) as SessionPayload;
-    if (!parsed.userId || !parsed.email || parsed.exp < Date.now()) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 export type AuthenticatedUser = {
   id: string;
   email: string;
@@ -95,7 +57,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    const session = verifySessionToken(token);
+    const session = await verifySessionToken(token);
     if (!session) return null;
 
     const dbUser = await prisma.user.findUnique({ where: { id: session.userId } });
@@ -106,8 +68,15 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     // claim carried in the session token. See src/server/authz.ts.
     const isSystemAdmin = isAdminEmail(dbUser.email);
 
-    const userPlan = rawUser.plan || (isSystemAdmin ? "ENTERPRISE" : "BASIC");
-    const defaultCredits = userPlan === "ENTERPRISE" ? 100000 : userPlan === "PRO" ? 25000 : 5000;
+    const userPlan = rawUser.plan || (isSystemAdmin ? "ENTERPRISE" : "FREE");
+    const defaultCredits =
+      userPlan === "ENTERPRISE"
+        ? 500000
+        : userPlan === "PRO"
+        ? 100000
+        : userPlan === "LITE"
+        ? 25000
+        : 100;
     const creditsTotal = typeof rawUser.creditsTotal === "number" ? rawUser.creditsTotal : defaultCredits;
     const creditsRemaining =
       typeof rawUser.creditsRemaining === "number" ? rawUser.creditsRemaining : creditsTotal;

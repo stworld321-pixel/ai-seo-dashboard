@@ -16,6 +16,86 @@ function countWordsFromHtml(html?: string): number | null {
   return plain.split(" ").length;
 }
 
+export function sanitizeSiteUrl(url: string, fallback: string): string {
+  if (!url || typeof url !== "string") return fallback.replace(/\/+$/, "");
+  let clean = url.trim();
+  // Handle double URL concatenation e.g. "https://farmm2home.com/http://farmm2home.com/"
+  const doubleMatch = clean.match(/https?:\/\/[^\/]+\/(https?:\/\/.*)/i);
+  if (doubleMatch?.[1]) {
+    clean = doubleMatch[1];
+  }
+  clean = clean.replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(clean)) {
+    clean = `https://${clean}`;
+  }
+  return clean;
+}
+
+export async function resolveWordPressCredentials(
+  websiteId: string,
+  fallbackSiteUrl?: string,
+): Promise<{ siteUrl: string; username?: string; appPassword?: string }> {
+  const website = await prisma.website.findUnique({ where: { id: websiteId } });
+  let cleanSiteUrl = sanitizeSiteUrl(
+    fallbackSiteUrl || website?.url || process.env.WP_URL || "",
+    "https://farmm2home.com",
+  );
+
+  let username: string | undefined;
+  let appPassword: string | undefined;
+
+  // 1. Look for user-configured active CMS integration (preferring wordpress_self_hosted then wordpress)
+  const existingCms =
+    (await prisma.integration.findFirst({
+      where: {
+        websiteId,
+        kind: "CMS",
+        status: "ACTIVE",
+        provider: { in: ["wordpress_self_hosted", "wordpress"] },
+      },
+      orderBy: { createdAt: "desc" },
+    })) ||
+    (await prisma.integration.findFirst({
+      where: { websiteId, kind: "CMS" },
+      orderBy: { createdAt: "desc" },
+    }));
+
+  if (existingCms?.secretCipher && existingCms?.secretIv && existingCms?.secretTag) {
+    try {
+      const creds = decryptJson<{ username?: string; appPassword?: string; siteUrl?: string }>({
+        cipher: Buffer.from(existingCms.secretCipher),
+        iv: Buffer.from(existingCms.secretIv),
+        tag: Buffer.from(existingCms.secretTag),
+      });
+      if (creds.username) username = creds.username.trim();
+      if (creds.appPassword) appPassword = creds.appPassword.trim();
+      if (creds.siteUrl) cleanSiteUrl = sanitizeSiteUrl(creds.siteUrl, cleanSiteUrl);
+    } catch {
+      // Ignore decryption failure
+    }
+  }
+
+  // Also check existingCms.config in case secrets were stored in config
+  if (existingCms?.config && typeof existingCms.config === "object") {
+    const cfg = existingCms.config as Record<string, unknown>;
+    if (!username && typeof cfg.username === "string" && cfg.username.trim()) {
+      username = cfg.username.trim();
+    }
+    if (!appPassword && typeof cfg.appPassword === "string" && cfg.appPassword.trim()) {
+      appPassword = cfg.appPassword.trim();
+    }
+    if (typeof cfg.siteUrl === "string" && cfg.siteUrl.trim()) {
+      cleanSiteUrl = sanitizeSiteUrl(cfg.siteUrl, cleanSiteUrl);
+    }
+  }
+
+  // 2. Fall back to environment variables ONLY if user has not stored credentials in the DB
+  if (!username) username = process.env.WP_USERNAME?.trim() || undefined;
+  if (!appPassword) appPassword = process.env.WP_APP_PASSWORD?.trim() || undefined;
+
+  return { siteUrl: cleanSiteUrl, username, appPassword };
+}
+
 export async function syncLiveWordPressCatalogAndTelemetry(params: {
   websiteId: string;
   siteUrl: string;
@@ -23,40 +103,12 @@ export async function syncLiveWordPressCatalogAndTelemetry(params: {
   syncedPages: number;
   telemetry: LiveSiteTelemetry;
 }> {
-  const cleanSiteUrl = params.siteUrl.replace(/\/+$/, "");
+  const { siteUrl: cleanSiteUrl, username, appPassword } = await resolveWordPressCredentials(
+    params.websiteId,
+    params.siteUrl,
+  );
 
-  // Resolve credentials from .env or stored encrypted integration
-  let username = process.env.WP_USERNAME?.trim() || undefined;
-  let appPassword = process.env.WP_APP_PASSWORD?.trim() || undefined;
 
-  if (!username || !appPassword) {
-    const existingCms = await prisma.integration.findUnique({
-      where: {
-        websiteId_kind_provider: {
-          websiteId: params.websiteId,
-          kind: "CMS",
-          provider: "wordpress",
-        },
-      },
-    });
-    if (
-      existingCms?.secretCipher &&
-      existingCms?.secretIv &&
-      existingCms?.secretTag
-    ) {
-      try {
-        const creds = decryptJson<{ username?: string; appPassword?: string }>({
-          cipher: Buffer.from(existingCms.secretCipher),
-          iv: Buffer.from(existingCms.secretIv),
-          tag: Buffer.from(existingCms.secretTag),
-        });
-        username = creds.username || username;
-        appPassword = creds.appPassword || appPassword;
-      } catch {
-        // Ignore decryption failure
-      }
-    }
-  }
 
   const wp = new WordPressProvider({
     siteUrl: cleanSiteUrl,
@@ -286,39 +338,7 @@ export async function applyInternalLinkToLiveWordPress(params: {
   changed: boolean;
   mode: "already-linked" | "inline-anchor" | "contextual-callout";
 }> {
-  const website = await prisma.website.findUnique({ where: { id: params.websiteId } });
-  const cleanSiteUrl = (website?.url || process.env.WP_URL || "").replace(
-    /\/+$/,
-    "",
-  );
-
-  let username = process.env.WP_USERNAME?.trim() || undefined;
-  let appPassword = process.env.WP_APP_PASSWORD?.trim() || undefined;
-
-  const existingCms = await prisma.integration.findFirst({
-    where: { websiteId: params.websiteId, kind: "CMS" },
-  });
-
-  if ((!username || !appPassword) && existingCms?.secretCipher && existingCms?.secretIv && existingCms?.secretTag) {
-    try {
-      const creds = decryptJson<{ username?: string; appPassword?: string }>({
-        cipher: Buffer.from(existingCms.secretCipher),
-        iv: Buffer.from(existingCms.secretIv),
-        tag: Buffer.from(existingCms.secretTag),
-      });
-      username = creds.username || username;
-      appPassword = creds.appPassword || appPassword;
-    } catch {
-      // Ignore decryption failure
-    }
-  }
-
-  const wp = new WordPressProvider({
-    siteUrl: cleanSiteUrl,
-    username,
-    appPassword,
-    timeoutMs: 25_000,
-  });
+  const wp = await getWordPressProvider(params.websiteId);
 
   const result = await wp.applyInternalLink({
     sourceUrl: params.sourceUrl,
@@ -328,6 +348,9 @@ export async function applyInternalLinkToLiveWordPress(params: {
 
   // Refresh Rank Math link telemetry in background/DB so the Internal Links page updates immediately
   try {
+    const existingCms = await prisma.integration.findFirst({
+      where: { websiteId: params.websiteId, kind: "CMS" },
+    });
     const telemetry = await wp.fetchLiveSiteTelemetry();
     if (existingCms && telemetry.rankMathLinks) {
       const prevConfig = (existingCms.config ?? {}) as Record<string, unknown>;
@@ -352,44 +375,14 @@ export async function applyInternalLinkToLiveWordPress(params: {
 
 /**
  * Builds an authenticated WordPress client for a website, resolving credentials
- * from the environment first and then the encrypted CMS integration record.
+ * from the encrypted CMS integration record first and falling back to environment variables.
  * Shared by publishing and category management so both see the same site.
  */
 export async function getWordPressProvider(websiteId: string): Promise<WordPressProvider> {
-  const website = await prisma.website.findUnique({ where: { id: websiteId } });
-  const cleanSiteUrl = (website?.url || process.env.WP_URL || "").replace(
-    /\/+$/,
-    "",
-  );
-
-  let username = process.env.WP_USERNAME?.trim() || undefined;
-  let appPassword = process.env.WP_APP_PASSWORD?.trim() || undefined;
-
-  const existingCms = await prisma.integration.findFirst({
-    where: { websiteId, kind: "CMS" },
-  });
-
-  if (
-    (!username || !appPassword) &&
-    existingCms?.secretCipher &&
-    existingCms?.secretIv &&
-    existingCms?.secretTag
-  ) {
-    try {
-      const creds = decryptJson<{ username?: string; appPassword?: string }>({
-        cipher: Buffer.from(existingCms.secretCipher),
-        iv: Buffer.from(existingCms.secretIv),
-        tag: Buffer.from(existingCms.secretTag),
-      });
-      username = creds.username || username;
-      appPassword = creds.appPassword || appPassword;
-    } catch {
-      // Ignore decryption failure
-    }
-  }
+  const { siteUrl, username, appPassword } = await resolveWordPressCredentials(websiteId);
 
   return new WordPressProvider({
-    siteUrl: cleanSiteUrl,
+    siteUrl,
     username,
     appPassword,
     timeoutMs: 25_000,

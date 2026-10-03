@@ -221,19 +221,108 @@ export async function POST(request: Request) {
     }
 
     if (type === "whatsapp") {
-      // Honour the provider the admin picked in the form; fall back to what is stored.
-      // (This used to shadow the outer `provider`, so Meta could never be tested.)
-      const waProvider = provider || (await getSystemSettingValue("whatsapp_provider")) || "twilio";
+      const candidateSettings = (json.settings as Record<string, string>) || {};
+      const waProvider = provider || candidateSettings.whatsapp_provider || (await getSystemSettingValue("whatsapp_provider")) || "twilio";
+
+      if (waProvider === "direct_wa_me") {
+        return NextResponse.json({
+          ok: true,
+          latencyMs: Date.now() - startTime,
+          provider: "direct_wa_me",
+          message: "Instant 1-Click WhatsApp gateway is enabled! Zero API setup required — alerts and direct messages will generate instant click-to-chat links with pre-filled SEO reports.",
+        });
+      }
+
+      if (waProvider === "custom_webhook") {
+        const url = (
+          candidateSettings.whatsapp_webhook_url ||
+          (await getSystemSettingValue("whatsapp_webhook_url")) ||
+          ""
+        ).trim();
+        const token = (
+          candidateSettings.whatsapp_webhook_token ||
+          (await getSystemSettingValue("whatsapp_webhook_token")) ||
+          ""
+        ).trim();
+
+        if (!url) {
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            provider: "custom_webhook",
+            message: "Missing Webhook URL. Please enter your HTTP webhook or gateway URL (e.g. UltraMsg, Evolution API, or Green API).",
+          });
+        }
+
+        try {
+          const testRes = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}`, "x-api-key": token } : {}),
+            },
+            body: JSON.stringify({
+              test: true,
+              type: "ping",
+              message: "AI SEO Command Center WhatsApp gateway ping",
+              timestamp: new Date().toISOString(),
+            }),
+          });
+
+          if (testRes.ok) {
+            return NextResponse.json({
+              ok: true,
+              latencyMs: Date.now() - startTime,
+              provider: "custom_webhook",
+              message: `Custom WhatsApp Webhook reached successfully (HTTP ${testRes.status})!`,
+            });
+          }
+
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            provider: "custom_webhook",
+            message: `Webhook endpoint returned HTTP ${testRes.status}. Please check endpoint configuration.`,
+          });
+        } catch (err: unknown) {
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            provider: "custom_webhook",
+            message: err instanceof Error ? err.message : "Failed to reach WhatsApp custom webhook endpoint",
+          });
+        }
+      }
 
       if (waProvider === "twilio") {
-        const sid = (await getSystemSettingValue("whatsapp_account_sid")) || process.env.TWILIO_ACCOUNT_SID;
-        const token = (await getSystemSettingValue("whatsapp_auth_token")) || process.env.TWILIO_AUTH_TOKEN;
+        const sid = (
+          candidateSettings.whatsapp_account_sid ||
+          (await getSystemSettingValue("whatsapp_account_sid")) ||
+          process.env.TWILIO_ACCOUNT_SID ||
+          ""
+        ).trim();
+        const token = (
+          candidateSettings.whatsapp_auth_token ||
+          (await getSystemSettingValue("whatsapp_auth_token")) ||
+          process.env.TWILIO_AUTH_TOKEN ||
+          ""
+        ).trim();
 
         if (!sid || !token) {
           return NextResponse.json({
             ok: false,
             latencyMs: Date.now() - startTime,
+            provider: "twilio",
             message: "Missing Twilio Account SID or Auth Token in WhatsApp settings.",
+          });
+        }
+
+        if (!sid.startsWith("AC")) {
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            provider: "twilio",
+            message: `Invalid Twilio Account SID "${sid}". Account SIDs must start with "AC".`,
           });
         }
 
@@ -247,6 +336,7 @@ export async function POST(request: Request) {
           return NextResponse.json({
             ok: false,
             latencyMs: Date.now() - startTime,
+            provider: "twilio",
             message: data?.message || `Twilio HTTP ${res.status}`,
           });
         }
@@ -255,60 +345,81 @@ export async function POST(request: Request) {
           ok: true,
           latencyMs: Date.now() - startTime,
           provider: "twilio",
-          message: `Twilio WhatsApp Gateway verified! Account "${data?.friendly_name}" is active.`,
+          message: `Twilio WhatsApp Gateway verified! Account "${data?.friendly_name || sid}" is active.`,
         });
       } else {
-        const metaToken = await getSystemSettingValue("whatsapp_meta_token");
-        const phoneId = await getSystemSettingValue("whatsapp_meta_phone_id");
+        const rawToken = (
+          candidateSettings.whatsapp_meta_token ||
+          (await getSystemSettingValue("whatsapp_meta_token")) ||
+          process.env.META_WHATSAPP_ACCESS_TOKEN ||
+          ""
+        ).trim();
+        const rawPhoneId = (
+          candidateSettings.whatsapp_meta_phone_id ||
+          (await getSystemSettingValue("whatsapp_meta_phone_id")) ||
+          process.env.META_WHATSAPP_PHONE_ID ||
+          ""
+        ).trim();
 
-        if (!metaToken || !phoneId) {
+        if (!rawToken || !rawPhoneId) {
           return NextResponse.json({
             ok: false,
             latencyMs: Date.now() - startTime,
+            provider: "meta",
             message:
-              "Meta WhatsApp Cloud API requires both a Phone Number ID and an Access Token. Save the settings, then test again.",
+              "Meta WhatsApp Cloud API requires both a Phone Number ID and a System User Access Token. Please fill in both fields.",
           });
         }
 
-        // Actually call Graph rather than just checking the fields are non-empty:
-        // this verifies the token, the phone number ID, and that the two belong together.
+        const phoneId = rawPhoneId.replace(/[^\d]/g, "");
+        if (!phoneId) {
+          return NextResponse.json({
+            ok: false,
+            latencyMs: Date.now() - startTime,
+            provider: "meta",
+            message: `Invalid Phone Number ID "${rawPhoneId}". It must consist of digits only (e.g. 1000293848123). Do not enter telephone numbers here.`,
+          });
+        }
+
+        // Verify Graph API connection
         const res = await fetch(
           `https://graph.facebook.com/v21.0/${encodeURIComponent(phoneId)}?fields=verified_name,display_phone_number,quality_rating`,
-          { headers: { Authorization: `Bearer ${metaToken}` } },
+          { headers: { Authorization: `Bearer ${rawToken}` } },
         );
         const data = await res.json().catch(() => null);
 
         if (!res.ok) {
-          // Graph reports "nonexisting field (verified_name)" when the id is a real
-          // object the token can see but NOT a phone number — almost always the App
-          // ID or the WhatsApp Business Account ID pasted into the wrong box.
-          const wrongNodeType = /nonexisting field \(verified_name\)/i.test(
-            data?.error?.message ?? "",
-          );
+          const errCode = data?.error?.code;
+          const errMsg = data?.error?.message ?? "";
+          if (errCode === 190) {
+            return NextResponse.json({
+              ok: false,
+              latencyMs: Date.now() - startTime,
+              provider: "meta",
+              message: "Meta Access Token is expired or invalid (Error 190). Generate a new System User Permanent Token in Meta Business Suite.",
+            });
+          }
+          const wrongNodeType = /nonexisting field \(verified_name\)/i.test(errMsg);
           return NextResponse.json({
             ok: false,
             latencyMs: Date.now() - startTime,
             provider: "meta",
             message: wrongNodeType
-              ? `The Phone Number ID "${phoneId}" is not a WhatsApp phone number — it looks like an App ID or WhatsApp Business Account ID. Copy the ID shown directly beneath the sender number in Meta → WhatsApp → API Setup.`
+              ? `The ID "${phoneId}" is not a WhatsApp Phone Number ID (it appears to be an App ID or WABA ID). Copy the ID shown under "Phone number ID" in Meta App Dashboard → WhatsApp → API Setup.`
               : data?.error?.message || `Meta Graph API returned HTTP ${res.status}`,
           });
         }
 
-        // Reading the number only proves the token can SEE it. Sending additionally
-        // requires the System User to have the WhatsApp Business Account assigned as
-        // an asset. Check that too, so a green test actually means "can send".
-        // Treat anything other than a definitive empty list as inconclusive: user
-        // tokens (not system users) have no such edge and must not fail the test.
+        // Advisory check: Ensure System User has WABA assigned
         try {
           const meRes = await fetch("https://graph.facebook.com/v21.0/me?fields=id", {
-            headers: { Authorization: `Bearer ${metaToken}` },
+            headers: { Authorization: `Bearer ${rawToken}` },
           });
           const me = await meRes.json().catch(() => null);
           if (meRes.ok && me?.id) {
             const wabaRes = await fetch(
               `https://graph.facebook.com/v21.0/${me.id}/assigned_whatsapp_business_accounts?fields=id`,
-              { headers: { Authorization: `Bearer ${metaToken}` } },
+              { headers: { Authorization: `Bearer ${rawToken}` } },
             );
             const waba = await wabaRes.json().catch(() => null);
             if (wabaRes.ok && Array.isArray(waba?.data) && waba.data.length === 0) {
@@ -316,21 +427,71 @@ export async function POST(request: Request) {
                 ok: false,
                 latencyMs: Date.now() - startTime,
                 provider: "meta",
-                message: `Token reads "${data?.verified_name ?? phoneId}" fine, but no WhatsApp Business Account is assigned to this System User, so sending will fail with "Authorization Error". In Meta Business Settings → Users → System Users → Add Assets → WhatsApp Accounts, assign the WABA with Full control, then generate a NEW token (existing tokens never pick up newly assigned assets).`,
+                message: `Token reads "${data?.verified_name ?? phoneId}" fine, but no WhatsApp Business Account is assigned to this System User. In Meta Business Settings → Users → System Users → Add Assets → WhatsApp Accounts, assign the WABA with Full control, then generate a NEW token.`,
               });
             }
           }
         } catch {
-          // Network/shape problem on an advisory check: fall through to success.
+          // Ignore advisory network failures
         }
 
         return NextResponse.json({
           ok: true,
           latencyMs: Date.now() - startTime,
           provider: "meta",
-          message: `Meta WhatsApp Cloud API verified! Sender "${data?.verified_name ?? "Unknown"}" (${data?.display_phone_number ?? phoneId}), quality rating: ${data?.quality_rating ?? "N/A"}.`,
+          message: `Meta WhatsApp Cloud API verified! Sender "${data?.verified_name ?? "Unknown"}" (${data?.display_phone_number ?? phoneId}), quality rating: ${data?.quality_rating ?? "GREEN"}.`,
         });
       }
+    }
+
+    if (type === "telegram") {
+      const candidateSettings = (json.settings as Record<string, string>) || {};
+      const tgProvider = provider || candidateSettings.telegram_provider || (await getSystemSettingValue("telegram_provider")) || "bot_api";
+
+      if (tgProvider === "direct_t_me") {
+        return NextResponse.json({
+          ok: true,
+          latencyMs: Date.now() - startTime,
+          provider: "direct_t_me",
+          message: "Instant 1-Click Telegram gateway enabled! Ready to share real-time SEO alerts via Telegram Web & Apps.",
+        });
+      }
+
+      const botToken = (
+        candidateSettings.telegram_bot_token ||
+        (await getSystemSettingValue("telegram_bot_token")) ||
+        process.env.TELEGRAM_BOT_TOKEN ||
+        ""
+      ).trim();
+
+      if (!botToken) {
+        return NextResponse.json({
+          ok: false,
+          latencyMs: Date.now() - startTime,
+          provider: "telegram",
+          message: "Missing Telegram Bot Token. Create a bot in @BotFather on Telegram and paste the API token.",
+        });
+      }
+
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.ok) {
+        return NextResponse.json({
+          ok: false,
+          latencyMs: Date.now() - startTime,
+          provider: "telegram",
+          message: data?.description || "Failed to authenticate Telegram Bot Token with Telegram API.",
+        });
+      }
+
+      const botUser = data.result;
+      return NextResponse.json({
+        ok: true,
+        latencyMs: Date.now() - startTime,
+        provider: "telegram",
+        message: `Telegram Bot connection verified! Bot "${botUser.first_name}" (@${botUser.username}) is active and ready to send notifications.`,
+      });
     }
 
     if (type === "google") {

@@ -23,7 +23,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
-  const [selectedPlan, setSelectedPlan] = useState<"BASIC" | "PRO" | "ENTERPRISE">("BASIC");
+  const [selectedPlan, setSelectedPlan] = useState<"FREE" | "LITE" | "PRO" | "ENTERPRISE">("FREE");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -317,23 +317,23 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {[
                   {
-                    id: "BASIC",
-                    name: "Basic",
-                    price: "$29",
-                    desc: "1 Site · 500 Keywords · 5K Credits",
+                    id: "FREE",
+                    name: "Free Starter",
+                    price: "$0",
+                    desc: "1 Site · 20 Keywords · 100 Credits",
+                  },
+                  {
+                    id: "LITE",
+                    name: "AI CMO Lite",
+                    price: "$108",
+                    desc: "1 Site · 1.5K Keywords · 25K Credits",
                   },
                   {
                     id: "PRO",
-                    name: "Pro ⭐",
-                    price: "$79",
-                    desc: "5 Sites · 2,500 Keywords · All Agents",
+                    name: "AI CMO Pro",
+                    price: "$208",
+                    desc: "3 Sites · 5K Keywords · Full Suite",
                     popular: true,
-                  },
-                  {
-                    id: "ENTERPRISE",
-                    name: "Enterprise",
-                    price: "$199",
-                    desc: "20 Sites · 10K Keywords · Agency Scale",
                   },
                 ].map((plan) => {
                   const selected = selectedPlan === plan.id;

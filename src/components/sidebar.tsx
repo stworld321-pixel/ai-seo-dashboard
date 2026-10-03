@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Radar,
   Search,
+  Send,
   Settings,
   Share2,
   Shield,
@@ -56,7 +57,6 @@ const GROUPS: Group[] = [
     items: [
       { href: "/websites", label: "Manage Websites", icon: Globe },
       { href: "/onboarding", label: "Add Website", icon: Sparkles },
-      { href: "/settings", label: "Website Settings", icon: Settings },
     ],
   },
   {
@@ -88,20 +88,19 @@ const GROUPS: Group[] = [
       { href: "/seo-agent", label: "SEO Agent", icon: Target },
       { href: "/article-agent", label: "Article Agent", icon: FileText },
       { href: "/reddit-agent", label: "Reddit Agent", icon: Activity },
-      { href: "/x-agent", label: "X Influencer Agent", icon: Globe },
+      { href: "/x-agent", label: "X / Twitter Agent", icon: Globe },
     ],
   },
   {
     label: "Integrations",
     items: [
-      { href: "/integrations", label: "All Integrations", icon: Layers },
+      { href: "/integrations", label: "Integrations", icon: Layers },
       { href: "/automation/activity", label: "Activity Log", icon: Activity },
     ],
   },
   {
-    label: "Settings & Plans",
+    label: "Billing & Plans",
     items: [
-      { href: "/settings", label: "Settings & API Keys", icon: Settings },
       { href: "/pricing", label: "Plans & Pricing", icon: CreditCard },
     ],
   },
@@ -110,10 +109,10 @@ const GROUPS: Group[] = [
 const ADMIN_TABS = [
   { id: "overview", label: "Overview", icon: Activity },
   { id: "users", label: "Users Management", icon: Users },
-  { id: "ai_models", label: "AI Model Integrations", icon: Bot },
   { id: "developer_connect", label: "Developer Connect (X & Reddit)", icon: Share2 },
   { id: "google_auth", label: "Google Auth & OAuth", icon: Shield },
   { id: "whatsapp", label: "WhatsApp Messenger & API", icon: MessageSquare },
+  { id: "telegram", label: "Telegram Bot & Alerts", icon: Send },
   { id: "plans_payments", label: "Plans & Payments", icon: CreditCard },
   { id: "websites", label: "Websites Directory", icon: Globe },
 ];
@@ -136,10 +135,23 @@ export function Sidebar() {
     if (isStandaloneAuthPage) return;
     let active = true;
     fetch("/api/auth/me", { cache: "no-store" })
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 401) {
+          if (pathname !== "/pricing") {
+            window.location.href = `/login?returnTo=${encodeURIComponent(pathname)}`;
+          }
+          return null;
+        }
+        return res.json();
+      })
       .then((data) => {
-        if (!active) return;
-        setUser(data?.data?.user ?? data?.user ?? null);
+        if (!active || !data) return;
+        const fetchedUser = data?.data?.user ?? data?.user ?? null;
+        if (!fetchedUser && pathname !== "/pricing" && !pathname.startsWith("/api/")) {
+          window.location.href = `/login?returnTo=${encodeURIComponent(pathname)}`;
+          return;
+        }
+        setUser(fetchedUser);
         setAuthChecked(true);
       })
       .catch(() => {
@@ -151,22 +163,31 @@ export function Sidebar() {
     };
   }, [pathname, isStandaloneAuthPage]);
 
+  useEffect(() => {
+    if (isAdminPage && authChecked && !user?.isAdmin) {
+      router.push("/");
+    }
+  }, [isAdminPage, authChecked, user, router]);
+
   if (isStandaloneAuthPage) {
     return null;
   }
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    setUser(null);
-    router.push("/login");
-    router.refresh();
+    try {
+      document.cookie = "seo_session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+      document.cookie = "active_website_id=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+      await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+    } catch {
+      // ignore
+    } finally {
+      setUser(null);
+      window.location.href = "/login";
+    }
   }
 
   function buildHref(baseHref: string): string {
     if (baseHref === "/onboarding" || baseHref === "/websites") return baseHref;
-    // Must come from useSearchParams, not window.location: reading `window`
-    // during render makes the server emit a bare href and the client a
-    // "?website=..." one, so every link's href mismatches on hydration.
     const w = searchParams.get("website");
     if (w) return `${baseHref}?website=${encodeURIComponent(w)}`;
     return baseHref;
@@ -181,8 +202,8 @@ export function Sidebar() {
         .toUpperCase()
     : user?.email?.slice(0, 2).toUpperCase() || "AD";
 
-  // Dedicated SuperAdmin Sidebar Content (8 Tabs ONLY)
-  if (isAdminPage) {
+  // Dedicated SuperAdmin Sidebar Content (8 Tabs ONLY) - Only for verified administrators
+  if (isAdminPage && user?.isAdmin) {
     const adminNavContent = (
       <div className="flex min-h-full flex-col justify-between">
         <div>
@@ -236,18 +257,6 @@ export function Sidebar() {
                 );
               })}
             </ul>
-
-            {/* Exit to User Dashboard */}
-            <div className="mt-6 border-t border-[var(--color-border)] pt-4">
-              <Link
-                href="/"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] transition-colors"
-              >
-                <ArrowLeft size={14} />
-                Return to User Dashboard
-              </Link>
-            </div>
           </nav>
         </div>
 
@@ -434,8 +443,14 @@ export function Sidebar() {
                       ADMIN
                     </span>
                   ) : (
-                    <span className="shrink-0 rounded bg-indigo-500/10 px-1 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 leading-none">
-                      {user.plan === "ENTERPRISE" ? "ENTERPRISE" : user.plan === "PRO" ? "PRO ⭐" : "BASIC"}
+                    <span className="shrink-0 rounded bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 leading-none">
+                      {user.plan === "ENTERPRISE"
+                        ? "ENTERPRISE"
+                        : user.plan === "PRO"
+                        ? "AI CMO PRO ⭐"
+                        : user.plan === "LITE"
+                        ? "AI CMO LITE"
+                        : "FREE STARTER"}
                     </span>
                   )}
                 </div>
@@ -446,7 +461,7 @@ export function Sidebar() {
             {/* Credits bar */}
             <div className="pt-1.5 border-t border-[var(--color-border)] flex items-center justify-between text-[11px]">
               <span className="text-[var(--color-muted)] flex items-center gap-1">
-                ⚡ <span className="font-semibold text-[var(--color-foreground)]">{(user.creditsRemaining ?? 5000).toLocaleString()}</span> credits
+                ⚡ <span className="font-semibold text-[var(--color-foreground)]">{(user.creditsRemaining ?? 100).toLocaleString()}</span> credits
               </span>
               <Link
                 href="/pricing"

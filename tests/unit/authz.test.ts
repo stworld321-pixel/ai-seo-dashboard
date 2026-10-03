@@ -14,7 +14,11 @@ describe("isAdminEmail", () => {
   it("grants admin only to the configured owner by default", () => {
     delete process.env.ADMIN_EMAILS;
     delete process.env.ADMIN_EMAIL;
-    expect(adminEmails()).toEqual(["suriyamanikandan4@gmail.com"]);
+    expect(adminEmails()).toEqual([
+      "suriymanikandan4@gmail.com",
+      "suriyamanikandan4@gmail.com",
+    ]);
+    expect(isAdminEmail("suriymanikandan4@gmail.com")).toBe(true);
     expect(isAdminEmail("suriyamanikandan4@gmail.com")).toBe(true);
   });
 
@@ -36,6 +40,7 @@ describe("isAdminEmail", () => {
     delete process.env.ADMIN_EMAILS;
     delete process.env.ADMIN_EMAIL;
     expect(isAdminEmail("  SuriyaManikandan4@Gmail.COM  ")).toBe(true);
+    expect(isAdminEmail("  SuriyManikandan4@Gmail.COM  ")).toBe(true);
   });
 
   it("treats a missing address as not admin", () => {
@@ -50,12 +55,14 @@ describe("isAdminEmail", () => {
     expect(isAdminEmail("owner@acme.com")).toBe(true);
     expect(isAdminEmail("ops@acme.com")).toBe(true);
     // Overriding replaces the default rather than adding to it.
+    expect(isAdminEmail("suriymanikandan4@gmail.com")).toBe(false);
     expect(isAdminEmail("suriyamanikandan4@gmail.com")).toBe(false);
   });
 
   it("falls back to the default when the override is blank or junk", () => {
     process.env.ADMIN_EMAILS = "   ,  , ";
     delete process.env.ADMIN_EMAIL;
+    expect(isAdminEmail("suriymanikandan4@gmail.com")).toBe(true);
     expect(isAdminEmail("suriyamanikandan4@gmail.com")).toBe(true);
   });
 });

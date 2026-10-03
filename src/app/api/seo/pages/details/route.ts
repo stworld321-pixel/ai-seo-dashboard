@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { getDefaultWebsite, resolveWindow } from "@/server/services/dashboard";
+import { fetchUrlResilient, parseHtmlPage } from "@/server/services/ai-site-auditor";
 
 export async function GET(request: Request) {
   try {
@@ -25,18 +26,88 @@ export async function GET(request: Request) {
 
     const window = await resolveWindow(website.id, "28d");
 
-    // Fetch page record
+    // Fetch page record with flexible normalization
     const normalizedUrl = url.replace(/\/+$/, "");
-    const pageRecord = await prisma.pageRecord.findFirst({
+    let decodedUrl = url;
+    try {
+      decodedUrl = decodeURIComponent(url);
+    } catch {}
+    const decodedNorm = decodedUrl.replace(/\/+$/, "");
+
+    let pageRecord = await prisma.pageRecord.findFirst({
       where: {
         websiteId: website.id,
         OR: [
           { url: url },
           { url: normalizedUrl },
           { url: `${normalizedUrl}/` },
+          { url: decodedUrl },
+          { url: decodedNorm },
+          { url: `${decodedNorm}/` },
         ],
       },
     });
+
+    // If never crawled yet, perform on-the-fly live crawl so real metadata is returned
+    if (!pageRecord || !pageRecord.lastCrawledAt) {
+      try {
+        let domain = website.url;
+        try {
+          domain = new URL(website.url).hostname.replace(/^www\./, "");
+        } catch {}
+        const res = await fetchUrlResilient(url, 6000);
+        if (res.status >= 200 && res.status < 400 && res.body) {
+          const parsed = parseHtmlPage(url, res.body, domain);
+          const now = new Date();
+          pageRecord = await prisma.pageRecord.upsert({
+            where: {
+              websiteId_url: {
+                websiteId: website.id,
+                url,
+              },
+            },
+            create: {
+              websiteId: website.id,
+              url,
+              title: parsed.title,
+              h1: parsed.h1,
+              metaDescription: parsed.metaDescription,
+              canonical: parsed.canonical,
+              wordCount: parsed.wordCount,
+              contentScore: parsed.contentScore,
+              contentScoreDetail: {
+                focusKeyword: parsed.focusKeyword,
+                internalLinks: parsed.internalLinks,
+                externalLinks: parsed.externalLinks,
+                hasSchema: parsed.hasSchema,
+                schemaTypes: parsed.schemaTypes,
+              },
+              lastCrawledAt: now,
+              status: !parsed.metaDescription || parsed.wordCount < 300 ? "OPTIMIZE" : "HEALTHY",
+            },
+            update: {
+              title: parsed.title,
+              h1: parsed.h1,
+              metaDescription: parsed.metaDescription,
+              canonical: parsed.canonical,
+              wordCount: parsed.wordCount,
+              contentScore: parsed.contentScore,
+              contentScoreDetail: {
+                focusKeyword: parsed.focusKeyword,
+                internalLinks: parsed.internalLinks,
+                externalLinks: parsed.externalLinks,
+                hasSchema: parsed.hasSchema,
+                schemaTypes: parsed.schemaTypes,
+              },
+              lastCrawledAt: now,
+              status: !parsed.metaDescription || parsed.wordCount < 300 ? "OPTIMIZE" : "HEALTHY",
+            },
+          });
+        }
+      } catch {
+        // Fall back gracefully if site is temporarily slow or unreachable
+      }
+    }
 
     // Fetch ranking queries from GscQueryPageDaily
     let queries: Array<{

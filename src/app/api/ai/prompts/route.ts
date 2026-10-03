@@ -46,6 +46,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: { message: "Website not found" } }, { status: 404 });
   }
 
+  // Check if prompt already exists
+  const existingPrompt = await prisma.aiPrompt.findUnique({
+    where: {
+      websiteId_text: {
+        websiteId: website.id,
+        text: body.text.trim(),
+      },
+    },
+  });
+
+  if (!existingPrompt) {
+    const { checkPromptLimit } = await import("@/server/services/credits");
+    const limitCheck = await checkPromptLimit(website.id);
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "PLAN_LIMIT_EXCEEDED",
+            message: limitCheck.error || "AI Search Prompt limit reached. Please upgrade your plan.",
+          },
+        },
+        { status: 403 },
+      );
+    }
+  }
+
   const prompt = await prisma.aiPrompt.upsert({
     where: {
       websiteId_text: {

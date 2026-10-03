@@ -1,11 +1,15 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Sparkles, ShieldAlert } from "lucide-react";
 import { Card } from "@/components/card";
 import { TopBar } from "@/components/top-bar";
 import { WebsiteBusinessCard } from "@/components/website-business-card";
 import { MarketingStrategySection } from "@/components/marketing-strategy-section";
 import { SeoOverviewCard } from "@/components/seo-overview-card";
+import { DashboardActionCenter } from "@/components/dashboard-action-center";
+import type { ActionItem } from "@/components/today-panel";
 import { prisma } from "@/server/db";
+import { getCurrentUser } from "@/server/auth";
 import { loadPageContext } from "@/server/services/page-context";
 import { computeHealthScore } from "@/server/intelligence/health-score";
 import { getWebsiteBusinessIntelligence } from "@/server/services/business-intelligence";
@@ -14,6 +18,11 @@ import type { Opportunity } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage(props: PageProps<"/">) {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
   const searchParams = await props.searchParams;
   const { ctx, reason, websiteName } = await loadPageContext(searchParams);
 
@@ -92,7 +101,7 @@ export default async function DashboardPage(props: PageProps<"/">) {
               <div>
                 <p className="font-semibold text-sm">SuperAdmin Privilege Required</p>
                 <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  The SuperAdmin Command Center (<code className="font-mono bg-amber-500/10 px-1 py-0.5 rounded">/admin</code>) requires administrator privileges. To access platform-wide governance, sign in with an authorized admin account (e.g. <span className="font-semibold text-[var(--color-foreground)]">suriyamanikandan4@gmail.com</span>).
+                  The SuperAdmin Command Center (<code className="font-mono bg-amber-500/10 px-1 py-0.5 rounded">/admin</code>) requires administrator privileges. To access platform-wide governance, sign in with an authorized admin account (e.g. <span className="font-semibold text-[var(--color-foreground)]">suriymanikandan4@gmail.com</span>).
                 </p>
               </div>
             </div>
@@ -108,7 +117,24 @@ export default async function DashboardPage(props: PageProps<"/">) {
         {/* 1. Website Business Profile, Favicon, Competitor Intelligence with Favicons & AI Product Information Popup */}
         <WebsiteBusinessCard data={businessData} />
 
-        {/* 2. Clean SEO & AI Search Overview */}
+        {/* 2. Top SEO Actions & Recommendations with 1-click Implement, Mark as Done & Dismiss */}
+        <DashboardActionCenter
+          initialActions={opps.map((o) => ({
+            id: o.id,
+            type: o.type,
+            priority: o.priority,
+            keyword: o.keyword ?? null,
+            targetUrl: o.targetUrl ?? null,
+            estimatedClicks: o.estimatedClicks,
+            why: o.why,
+            evidence: o.evidence as Record<string, unknown>,
+            recommendation: o.recommendation as { action: string; detail?: string }[],
+            status: o.status,
+          }))}
+          websiteName={website.name}
+        />
+
+        {/* 3. Clean SEO & AI Search Overview */}
         <SeoOverviewCard
           healthScore={health.total || 88}
           pageCount={pageRecords.length || 1}
@@ -122,7 +148,7 @@ export default async function DashboardPage(props: PageProps<"/">) {
           topTopics={topTopics}
         />
 
-        {/* 3. Marketing Strategy (ICP, Positioning Statement, Messaging Framework, Channel Prioritization, 30-Day Checklist) */}
+        {/* 4. Marketing Strategy (ICP, Positioning Statement, Messaging Framework, Channel Prioritization, 30-Day Checklist) */}
         <MarketingStrategySection strategy={businessData.marketingStrategy} websiteName={website.name} />
       </div>
     </>

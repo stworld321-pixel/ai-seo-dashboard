@@ -27,12 +27,30 @@ export type EngineInput = {
   previousPages?: PageMetrics[];
   /** Learned multipliers from ContentExperiment outcomes, clamped 0.7..1.4. */
   learnedWeights?: Record<string, number>;
+  /** Brand terms and variations to distinguish brand navigational queries from product/service content opportunities. */
+  brandTerms?: string[];
 };
 
 export type EngineResult = {
   opportunities: Opportunity[];
   curve: CtrCurve;
 };
+
+export function isBrandQuery(query?: string, brandTerms: string[] = []): boolean {
+  if (!query || brandTerms.length === 0) return false;
+  const q = query.toLowerCase().trim();
+  const qClean = q.replace(/[^a-z0-9]/g, "");
+  for (const b of brandTerms) {
+    if (!b) continue;
+    const bLower = b.toLowerCase().trim();
+    const bClean = bLower.replace(/[^a-z0-9]/g, "");
+    if (!bClean) continue;
+    if (qClean === bClean || qClean.startsWith(bClean) || qClean.endsWith(bClean) || qClean.includes(bClean)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 const QUICK_WIN_MIN = 3.5;
 const QUICK_WIN_MAX = 10.5;
@@ -275,10 +293,11 @@ function decliningPages(input: EngineInput): Opportunity[] {
  * F. Cannibalization: one query served by several pages, none dominant.
  * Requires query+page grain data; silently returns [] when unavailable.
  */
-export function detectCannibalization(rows: QueryMetrics[]): Opportunity[] {
+export function detectCannibalization(rows: QueryMetrics[], brandTerms: string[] = []): Opportunity[] {
   const byQuery = new Map<string, QueryMetrics[]>();
   for (const r of rows) {
     if (!r.page) continue;
+    if (r.page.includes("/my-account/") || r.page.includes("/cart/") || r.page.includes("/checkout/")) continue;
     const list = byQuery.get(r.query);
     if (list) list.push(r);
     else byQuery.set(r.query, [r]);
@@ -287,6 +306,10 @@ export function detectCannibalization(rows: QueryMetrics[]): Opportunity[] {
   const out: Opportunity[] = [];
   for (const [query, list] of byQuery) {
     if (list.length < 2) continue;
+    // Brand navigational searches naturally split across homepage, shop, and contact pages.
+    // They are NOT content cannibalization issues.
+    if (brandTerms.length > 0 && isBrandQuery(query, brandTerms)) continue;
+
     const total = list.reduce((s, r) => s + r.impressions, 0);
     if (total < 20) continue;
     const sorted = [...list].sort((a, b) => b.impressions - a.impressions);
@@ -321,33 +344,55 @@ export function detectCannibalization(rows: QueryMetrics[]): Opportunity[] {
 
 /**
  * Assign 1..5 priority within this website's set.
- *
- * Rank is derived from descending score ORDER, not from `percentileRank`:
- * with a small result set (a new domain might yield only two opportunities)
- * a tie-aware percentile puts the best item at ~0.75 and it would never be
- * labelled P1. The top opportunity must always be P1.
+ * Non-brand product/service keywords are prioritized so they aren't crowded out.
  */
-function assignPriorities(items: Opportunity[]): Opportunity[] {
-  const sorted = [...items].sort((a, b) => b.score - a.score);
-  const n = sorted.length;
-  return sorted.map((o, i) => {
-    const rank = n <= 1 ? 1 : 1 - i / n; // 1 for the best, approaching 0
-    const priority = rank >= 0.9 ? 1 : rank >= 0.7 ? 2 : rank >= 0.4 ? 3 : rank >= 0.15 ? 4 : 5;
+function assignPriorities(items: Opportunity[], brandTerms: string[] = []): Opportunity[] {
+  const nonBrand = items.filter((o) => !isBrandQuery(o.keyword ?? undefined, brandTerms));
+  const brand = items.filter((o) => isBrandQuery(o.keyword ?? undefined, brandTerms));
+
+  nonBrand.sort((a, b) => b.score - a.score);
+  brand.sort((a, b) => b.score - a.score);
+
+  const n = nonBrand.length;
+  const prioritizedNonBrand = nonBrand.map((o, i) => {
+    const rank = n <= 1 ? 1 : 1 - i / n;
+    const priority = rank >= 0.85 ? 1 : rank >= 0.65 ? 2 : rank >= 0.4 ? 3 : rank >= 0.15 ? 4 : 5;
     return { ...o, priority, score: round(o.score, 3) };
   });
+
+  const prioritizedBrand = brand.map((o) => ({
+    ...o,
+    priority: 5,
+    score: round(Math.min(o.score, 50), 3),
+  }));
+
+  return [...prioritizedNonBrand, ...prioritizedBrand];
 }
 
 export function runOpportunityEngine(input: EngineInput): EngineResult {
+  const brandTerms = input.brandTerms ?? [];
+
   const isStopword = (q?: string) => {
     if (!q) return false;
     const lower = q.toLowerCase().trim();
-    return ["services", "service", "our services", "about us", "about", "contact us", "contact", "home", "homepage", "privacy", "terms", "careers", "cart", "checkout", "support", "custom web solutions"].includes(lower);
+    const stopwords = [
+      "services", "service", "our services", "about us", "about", "contact us", "contact",
+      "home", "homepage", "privacy", "privacy policy", "terms", "terms and conditions",
+      "careers", "cart", "checkout", "support", "custom web solutions", "edit account",
+      "my account", "login", "sign in", "lost password", "reset password", "my-account"
+    ];
+    return stopwords.includes(lower);
+  };
+
+  const isUtilityUrl = (url?: string) => {
+    if (!url) return false;
+    return url.includes("/my-account") || url.includes("/cart") || url.includes("/checkout");
   };
 
   const cleanInput: EngineInput = {
     ...input,
-    queries: input.queries.filter((q) => !isStopword(q.query)),
-    queryPages: input.queryPages?.filter((q) => !isStopword(q.query)),
+    queries: (input.queries || []).filter((q) => !isStopword(q.query)),
+    queryPages: input.queryPages?.filter((q) => !isStopword(q.query) && !isUtilityUrl(q.page)),
     previousQueries: input.previousQueries?.filter((q) => !isStopword(q.query)),
   };
 
@@ -359,10 +404,21 @@ export function runOpportunityEngine(input: EngineInput): EngineResult {
     ...ctrGaps(cleanInput, curve),
     ...decliningKeywords(cleanInput),
     ...decliningPages(cleanInput),
-    ...detectCannibalization(cleanInput.queryPages ?? cleanInput.queries),
-  ].filter((o) => !isStopword(o.keyword));
+    ...detectCannibalization(cleanInput.queryPages ?? cleanInput.queries, brandTerms),
+  ]
+    .filter((o) => !isStopword(o.keyword) && !isUtilityUrl(o.targetUrl))
+    .map((o) => {
+      const isBrand = Boolean(o.keyword && brandTerms.length > 0 && isBrandQuery(o.keyword, brandTerms));
+      return {
+        ...o,
+        evidence: {
+          ...o.evidence,
+          isBrand,
+        },
+      };
+    });
 
-  const ranked = assignPriorities(all).sort((a, b) => b.score - a.score);
+  const ranked = assignPriorities(all, brandTerms).sort((a, b) => b.score - a.score);
   return { opportunities: ranked, curve };
 }
 

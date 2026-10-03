@@ -13,7 +13,7 @@ const registerSchema = z.object({
   email: z.string().email("Please enter a valid email address").max(180),
   password: z.string().min(8, "Password must be at least 8 characters").max(128),
   workspaceName: z.string().max(120).optional(),
-  plan: z.enum(["BASIC", "STARTER", "PRO", "ENTERPRISE"]).optional().default("BASIC"),
+  plan: z.enum(["FREE", "BASIC", "STARTER", "LITE", "PRO", "ENTERPRISE"]).optional().default("FREE"),
 });
 
 export async function POST(request: Request) {
@@ -36,9 +36,17 @@ export async function POST(request: Request) {
   const email = parsed.data.email.trim().toLowerCase();
   const password = parsed.data.password;
   const workspaceName = parsed.data.workspaceName?.trim() || `${name}'s Workspace`;
-  const selectedPlan = parsed.data.plan.toUpperCase() === "STARTER" ? "BASIC" : parsed.data.plan.toUpperCase();
+  const rawPlan = parsed.data.plan.toUpperCase();
+  const selectedPlan = rawPlan === "STARTER" || rawPlan === "BASIC" ? "FREE" : rawPlan;
 
-  const initialCredits = selectedPlan === "ENTERPRISE" ? 100000 : selectedPlan === "PRO" ? 25000 : 5000;
+  const initialCredits =
+    selectedPlan === "ENTERPRISE"
+      ? 500000
+      : selectedPlan === "PRO"
+      ? 100000
+      : selectedPlan === "LITE"
+      ? 25000
+      : 100;
 
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
@@ -92,7 +100,7 @@ export async function POST(request: Request) {
     },
   });
 
-  const token = createSessionToken({
+  const token = await createSessionToken({
     userId: user.id,
     email: user.email,
     name: user.name ?? name,

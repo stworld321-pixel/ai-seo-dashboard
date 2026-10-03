@@ -14,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Send,
   ShieldCheck,
   Trash2,
   X,
@@ -243,10 +244,21 @@ export function IntegrationsHub({
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [modalFeedback, setModalFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [testingDigest, setTestingDigest] = useState(false);
+  const [testDigestFeedback, setTestDigestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
   function isProviderConnected(providerId: string): boolean {
     if (providerId === "google_search_console") return googleStatus.isGscConnected;
     if (providerId === "google_analytics") return googleStatus.isGa4Connected;
+    if (providerId === "wordpress_self_hosted") {
+      const direct = integrationsList.some((i) => i.provider === "wordpress_self_hosted" && i.status === "ACTIVE");
+      if (direct) return true;
+      const legacy = integrationsList.find((i) => i.provider === "wordpress" && i.status === "ACTIVE");
+      return Boolean(legacy && !legacy.config?.apiToken);
+    }
+    if (providerId === "wordpress") {
+      return integrationsList.some((i) => i.provider === "wordpress" && i.status === "ACTIVE" && Boolean(i.config?.apiToken));
+    }
     return integrationsList.some((i) => i.provider === providerId && i.status === "ACTIVE");
   }
 
@@ -256,6 +268,19 @@ export function IntegrationsHub({
     }
     if (providerId === "google_analytics" && googleStatus.isGa4Connected) {
       return googleStatus.ga4PropertyId ? `Property ${googleStatus.ga4PropertyId}` : "GA4 Active";
+    }
+    if (providerId === "wordpress_self_hosted") {
+      const found = integrationsList.find(
+        (i) => (i.provider === "wordpress_self_hosted" || (i.provider === "wordpress" && !i.config?.apiToken)) && i.status === "ACTIVE"
+      );
+      if (!found) return undefined;
+      const user = found.config?.username as string | undefined;
+      return user ? `User: ${user}` : "Connected";
+    }
+    if (providerId === "wordpress") {
+      const found = integrationsList.find((i) => i.provider === "wordpress" && i.status === "ACTIVE" && Boolean(i.config?.apiToken));
+      if (!found) return undefined;
+      return "WordPress.com Active";
     }
     const found = integrationsList.find((i) => i.provider === providerId && i.status === "ACTIVE");
     if (!found) return undefined;
@@ -279,10 +304,46 @@ export function IntegrationsHub({
   const INTEGRATION_CATALOG: IntegrationItem[] = [
     // ── 1. CMS & Publishing Platforms ──
     {
+      id: "wordpress_self_hosted",
+      provider: "wordpress_self_hosted",
+      title: "WordPress (Self-Hosted / WooCommerce)",
+      description: "Connect your custom or WooCommerce WordPress site via Application Password.",
+      category: "publishing",
+      kind: "CMS",
+      icon: (c) => <WordPressIcon className={c} />,
+      isConnected: isProviderConnected("wordpress_self_hosted"),
+      connectedDetails: getConnectedSummary("wordpress_self_hosted"),
+      modalFields: [
+        {
+          id: "siteUrl",
+          label: "WordPress Site URL",
+          placeholder: "https://example.com",
+          type: "text",
+          required: true,
+          defaultValue: websiteUrl,
+        },
+        {
+          id: "username",
+          label: "WP Admin Username",
+          placeholder: "admin or editor@domain.com",
+          type: "text",
+          required: true,
+        },
+        {
+          id: "appPassword",
+          label: "Application Password",
+          placeholder: "xxxx xxxx xxxx xxxx",
+          type: "password",
+          required: true,
+          helperText: "Generated in WP Admin → Users → Profile → Application Passwords",
+        },
+      ],
+    },
+    {
       id: "wordpress",
       provider: "wordpress",
-      title: "WordPress",
-      description: "Publish articles to WordPress.com",
+      title: "WordPress.com (Hosted)",
+      description: "Publish articles to a WordPress.com hosted blog via REST API token.",
       category: "publishing",
       kind: "CMS",
       icon: (c) => <WordPressIcon className={c} />,
@@ -304,42 +365,6 @@ export function IntegrationsHub({
           type: "password",
           required: true,
           helperText: "Generated in WordPress.com Developer Console",
-        },
-      ],
-    },
-    {
-      id: "wordpress_self_hosted",
-      provider: "wordpress_self_hosted",
-      title: "WordPress (Self-Hosted)",
-      description: "Connect via application password",
-      category: "publishing",
-      kind: "CMS",
-      icon: (c) => <WordPressIcon className={c} />,
-      isConnected: isProviderConnected("wordpress_self_hosted") || isProviderConnected("wordpress"),
-      connectedDetails: getConnectedSummary("wordpress_self_hosted") || getConnectedSummary("wordpress"),
-      modalFields: [
-        {
-          id: "siteUrl",
-          label: "Website URL",
-          placeholder: "https://example.com",
-          type: "text",
-          required: true,
-          defaultValue: websiteUrl,
-        },
-        {
-          id: "username",
-          label: "WP Admin Username",
-          placeholder: "admin or editor@domain.com",
-          type: "text",
-          required: true,
-        },
-        {
-          id: "appPassword",
-          label: "Application Password",
-          placeholder: "xxxx xxxx xxxx xxxx",
-          type: "password",
-          required: true,
-          helperText: "Generated in WP Admin → Users → Profile → Application Passwords",
         },
       ],
     },
@@ -661,7 +686,7 @@ export function IntegrationsHub({
       id: "telegram",
       provider: "telegram",
       title: "Telegram",
-      description: "Receive daily digests and chat with your AI CMO on Telegram",
+      description: "Receive scheduled daily updates for GSC Performance, Keyword Rankings & AI Search",
       category: "messaging",
       kind: "LLM",
       icon: (c) => <TelegramIcon className={c} />,
@@ -670,18 +695,47 @@ export function IntegrationsHub({
       modalFields: [
         {
           id: "chatId",
-          label: "Telegram Chat ID or Username",
+          label: "Telegram Chat ID or Channel Username",
           placeholder: "@my_seo_channel or 123456789",
           type: "text",
           required: true,
-          helperText: "Send /start to our bot @SEOCommandBot to get your Chat ID.",
+          helperText: "Numerical Chat ID (via @userinfobot) or public Channel handle (e.g. @seo_alerts).",
+        },
+        {
+          id: "scheduleTime",
+          label: "Daily Dispatch Timing",
+          placeholder: "09:00",
+          type: "select",
+          defaultValue: "09:00",
+          options: [
+            { label: "08:00 AM (Early Morning Overview)", value: "08:00" },
+            { label: "09:00 AM (Standard Morning Digest)", value: "09:00" },
+            { label: "12:00 PM (Midday Performance Pulse)", value: "12:00" },
+            { label: "06:00 PM (Evening Summary & Movement)", value: "18:00" },
+            { label: "09:00 PM (Nightly Audit & Wrap-up)", value: "21:00" },
+          ],
+          helperText: "Time when your automated SEO digest will be delivered daily.",
+        },
+        {
+          id: "digestTopics",
+          label: "Included SEO Update Modules",
+          placeholder: "all",
+          type: "select",
+          defaultValue: "all",
+          options: [
+            { label: "📊 Complete Digest: GSC + Keywords + AI Updates + Technical", value: "all" },
+            { label: "🎯 Keywords & GSC Focus (Rankings, Clicks & Movement)", value: "keywords_gsc" },
+            { label: "🤖 AI Search & Visibility Focus (Citations & Gaps)", value: "ai_visibility" },
+            { label: "⚠️ Urgent Issues Only (Crawls, Drops & Anomalies)", value: "alerts_only" },
+          ],
+          helperText: "Customize which data sections are compiled into your daily message.",
         },
         {
           id: "botToken",
           label: "Custom Telegram Bot Token (Optional)",
           placeholder: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
           type: "password",
-          helperText: "Leave blank to use our default verified @SEOCommandBot notification service.",
+          helperText: "Leave blank to use default verified @SEOCommandBot or provide your own from @BotFather.",
         },
       ],
     },
@@ -806,23 +860,111 @@ export function IntegrationsHub({
   ];
 
   // Open modal with prefilled defaults
-  function handleOpenModal(item: IntegrationItem) {
+  async function handleOpenModal(item: IntegrationItem) {
     // If it's Google Search Console or Analytics and not connected, prompt Google OAuth directly
     if (
       (item.provider === "google_search_console" || item.provider === "google_analytics") &&
       !item.isConnected
     ) {
-      window.location.href = `/api/integrations/google/auth?websiteId=${websiteId}`;
+      try {
+        const res = await fetch(`/api/integrations/google/auth?websiteId=${encodeURIComponent(websiteId)}`);
+        const data = (await res.json().catch(() => ({}))) as {
+          url?: string;
+          needsOAuthConfig?: boolean;
+          error?: { message?: string };
+        };
+        if (data.url && data.url.startsWith("https://accounts.google.com")) {
+          window.location.href = data.url;
+          return;
+        }
+        if (data.needsOAuthConfig) {
+          alert("Google Cloud OAuth Client ID is not configured. Please configure it in Admin Settings or .env.");
+          return;
+        }
+        if (data.error?.message) {
+          alert(data.error.message);
+          return;
+        }
+      } catch {
+        // Fallback to direct navigation
+      }
+      window.location.href = `/api/integrations/google/auth?websiteId=${encodeURIComponent(websiteId)}`;
       return;
     }
 
+    const foundIntegration =
+      integrationsList.find((i) => i.provider === item.provider && i.status === "ACTIVE") ||
+      (item.provider === "wordpress_self_hosted"
+        ? integrationsList.find((i) => i.provider === "wordpress" && i.status === "ACTIVE")
+        : undefined);
+
     const initialVals: Record<string, string> = {};
     item.modalFields.forEach((f) => {
-      initialVals[f.id] = f.defaultValue || "";
+      const saved = foundIntegration?.config?.[f.id];
+      if (typeof saved === "string" && saved.length > 0) {
+        initialVals[f.id] = saved;
+      } else {
+        initialVals[f.id] = f.defaultValue || "";
+      }
     });
+
+    if (initialVals.siteUrl) {
+      let clean = initialVals.siteUrl.trim();
+      const doubleMatch = clean.match(/https?:\/\/[^\/]+\/(https?:\/\/.*)/i);
+      if (doubleMatch?.[1]) {
+        clean = doubleMatch[1];
+      }
+      initialVals.siteUrl = clean.replace(/\/+$/, "");
+    }
+
     setFormValues(initialVals);
     setModalFeedback(null);
+    setTestDigestFeedback(null);
     setActiveModal(item);
+  }
+
+  // Handle Telegram on-demand test digest
+  async function handleTestTelegramDigest() {
+    if (!formValues.chatId) {
+      setTestDigestFeedback({ ok: false, message: "Please enter a Telegram Chat ID or Channel Username first." });
+      return;
+    }
+    setTestingDigest(true);
+    setTestDigestFeedback(null);
+    try {
+      const res = await fetch("/api/integrations/telegram/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          websiteId,
+          chatId: formValues.chatId,
+          botToken: formValues.botToken || undefined,
+          includeGsc: formValues.digestTopics !== "ai_visibility",
+          includeKeywords: formValues.digestTopics !== "ai_visibility",
+          includeAiUpdates: formValues.digestTopics !== "keywords_gsc",
+          includeTechnical: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTestDigestFeedback({
+          ok: true,
+          message: `Live Daily SEO Digest dispatched to Telegram successfully! (ID: ${data.messageId})`,
+        });
+      } else {
+        setTestDigestFeedback({
+          ok: false,
+          message: data?.error?.message || "Failed to dispatch Telegram digest.",
+        });
+      }
+    } catch (err: any) {
+      setTestDigestFeedback({
+        ok: false,
+        message: err?.message || "Network error dispatching Telegram digest.",
+      });
+    } finally {
+      setTestingDigest(false);
+    }
   }
 
   // Handle Save / Connect
@@ -832,19 +974,34 @@ export function IntegrationsHub({
     setLoading(true);
     setModalFeedback(null);
 
+    // Sanitize siteUrl if present in form
+    const sanitizedFormValues = { ...formValues };
+    if (sanitizedFormValues.siteUrl) {
+      let clean = sanitizedFormValues.siteUrl.trim();
+      const doubleMatch = clean.match(/https?:\/\/[^\/]+\/(https?:\/\/.*)/i);
+      if (doubleMatch?.[1]) {
+        clean = doubleMatch[1];
+      }
+      sanitizedFormValues.siteUrl = clean.replace(/\/+$/, "");
+    }
+
     try {
       // If it's Google Analytics / Search Console manual update:
       if (activeModal.provider === "google_search_console" || activeModal.provider === "google_analytics") {
-        await fetch("/api/integrations/google/connect", {
+        const res = await fetch("/api/integrations/google/connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             websiteId,
-            gscProperty: formValues.propertyUrl || undefined,
-            ga4PropertyId: formValues.propertyId || undefined,
+            gscProperty: sanitizedFormValues.propertyUrl || undefined,
+            ga4PropertyId: sanitizedFormValues.propertyId || undefined,
             accessToken: "local-manual-override",
           }),
-        }).catch(() => {});
+        });
+        const resData = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        if (!res.ok) {
+          throw new Error(resData?.error?.message || "Failed to update Google property.");
+        }
 
         setModalFeedback({ type: "success", message: "Connected successfully!" });
         setTimeout(() => {
@@ -862,25 +1019,30 @@ export function IntegrationsHub({
           websiteId,
           provider: activeModal.provider,
           kind: activeModal.kind,
-          config: formValues,
+          config: sanitizedFormValues,
           secrets: {
-            ...formValues,
+            ...sanitizedFormValues,
           },
         }),
       });
 
+      const resData = (await res.json().catch(() => ({}))) as {
+        data?: Record<string, unknown>;
+        error?: { message?: string };
+      };
+
       if (!res.ok) {
-        throw new Error("Failed to save integration.");
+        throw new Error(resData?.error?.message || "Failed to save integration.");
       }
 
       setIntegrationsList((prev) => [
         ...prev.filter((i) => i.provider !== activeModal.provider),
         {
-          id: `int_${Date.now()}`,
+          id: (resData.data?.id as string) || `int_${Date.now()}`,
           provider: activeModal.provider,
           kind: activeModal.kind,
           status: "ACTIVE",
-          config: formValues,
+          config: sanitizedFormValues,
         },
       ]);
 
@@ -930,35 +1092,35 @@ export function IntegrationsHub({
   const messagingItems = INTEGRATION_CATALOG.filter((i) => i.category === "messaging");
   const socialItems = INTEGRATION_CATALOG.filter((i) => i.category === "social");
 
-  // Reusable Card Renderer matching the user's uploaded images
+  // Reusable Card Renderer
   function renderCard(item: IntegrationItem) {
     return (
       <div
         key={item.id}
-        className="group relative flex flex-col justify-between rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-xs transition-all hover:border-[#D1D5DB] hover:shadow-sm dark:border-[var(--color-border)] dark:bg-[var(--color-surface)]"
+        className="group relative flex flex-col justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-xs transition-all hover:border-[var(--color-primary)]/40 hover:shadow-sm"
       >
         <div className="flex items-start gap-3.5">
           {/* Logo container */}
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#F3F4F6] bg-white p-2 shadow-2xs dark:border-neutral-700 dark:bg-neutral-800">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-2 shadow-2xs">
             {item.icon("w-6 h-6 object-contain")}
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <h3 className="text-sm font-semibold tracking-tight text-[#111827] dark:text-[#F9FAFB]">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold tracking-tight text-[var(--color-foreground)]">
                 {item.title}
               </h3>
               {item.isConnected && (
-                <span className="rounded-full bg-emerald-50 px-1.5 py-0.2 text-[10px] font-bold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-500/20">
                   Active
                 </span>
               )}
             </div>
-            <p className="mt-0.5 text-xs text-[#6B7280] dark:text-[var(--color-muted)] leading-relaxed">
+            <p className="mt-1 text-xs text-[var(--color-muted)] leading-relaxed">
               {item.description}
             </p>
             {item.connectedDetails && (
-              <p className="mt-1 font-mono text-[11px] text-emerald-600 dark:text-emerald-400 truncate">
+              <p className="mt-1.5 font-mono text-[11px] text-emerald-700 truncate">
                 {item.connectedDetails}
               </p>
             )}
@@ -966,18 +1128,18 @@ export function IntegrationsHub({
         </div>
 
         {/* Card Footer: Status Dot + Action Buttons */}
-        <div className="mt-5 flex items-center justify-between border-t border-[#F3F4F6] pt-3.5 dark:border-[var(--color-border)]">
+        <div className="mt-5 flex items-center justify-between border-t border-[var(--color-border)] pt-3.5">
           <div className="flex items-center gap-2 text-xs">
             <span
               className={`h-2 w-2 rounded-full ${
-                item.isConnected ? "bg-[#10B981]" : "bg-[#D1D5DB] dark:bg-neutral-600"
+                item.isConnected ? "bg-emerald-600" : "bg-stone-300"
               }`}
             />
             <span
               className={`text-xs ${
                 item.isConnected
-                  ? "font-medium text-[#10B981]"
-                  : "text-[#9CA3AF] dark:text-[var(--color-muted)]"
+                  ? "font-semibold text-emerald-700"
+                  : "text-[var(--color-muted)]"
               }`}
             >
               {item.isConnected ? "Connected" : "Not connected"}
@@ -988,7 +1150,7 @@ export function IntegrationsHub({
             {item.agentHref && (
               <Link
                 href={item.agentHref}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#111827] dark:text-neutral-300 dark:hover:bg-neutral-800 transition-colors"
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] transition-colors"
                 title="View suggestions and posts"
               >
                 <span>Open Agent</span>
@@ -1001,8 +1163,8 @@ export function IntegrationsHub({
               onClick={() => handleOpenModal(item)}
               className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-all ${
                 item.isConnected
-                  ? "border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F9FAFB] dark:border-[var(--color-border)] dark:bg-[var(--color-surface)] dark:text-neutral-200 dark:hover:bg-[var(--color-surface-muted)]"
-                  : "bg-[#111827] text-white hover:bg-[#1F2937] dark:bg-white dark:text-black dark:hover:bg-neutral-200 shadow-xs"
+                  ? "border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] shadow-2xs"
+                  : "bg-[var(--color-primary)] text-[var(--color-primary-fg)] hover:bg-[var(--color-primary-hover)] shadow-xs"
               }`}
             >
               {item.isConnected ? (
@@ -1025,10 +1187,10 @@ export function IntegrationsHub({
       {/* SECTION 1: CMS & PUBLISHING */}
       <section className="space-y-3.5">
         <div>
-          <h2 className="text-base font-bold tracking-tight text-[#111827] dark:text-[#F9FAFB]">
+          <h2 className="text-base font-bold tracking-tight text-[var(--color-foreground)]">
             Publishing Platforms
           </h2>
-          <p className="mt-0.5 text-xs text-[#6B7280] dark:text-[var(--color-muted)]">
+          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
             Connect your content management system to deploy approved articles, blogs, and SEO metadata automatically.
           </p>
         </div>
@@ -1038,13 +1200,13 @@ export function IntegrationsHub({
         </div>
       </section>
 
-      {/* SECTION 2: ANALYTICS (EXACT MATCH TO IMAGE 2) */}
+      {/* SECTION 2: ANALYTICS */}
       <section className="space-y-3.5 pt-2">
         <div>
-          <h2 className="text-base font-bold tracking-tight text-[#111827] dark:text-[#F9FAFB]">
+          <h2 className="text-base font-bold tracking-tight text-[var(--color-foreground)]">
             Analytics
           </h2>
-          <p className="mt-0.5 text-xs text-[#6B7280] dark:text-[var(--color-muted)]">
+          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
             Connect analytics tools to track performance. Disconnecting will remove the connector and all collected data.
           </p>
         </div>
@@ -1054,14 +1216,14 @@ export function IntegrationsHub({
         </div>
       </section>
 
-      {/* SECTION 3: MESSAGING (EXACT MATCH TO IMAGE 2) */}
+      {/* SECTION 3: MESSAGING */}
       <section className="space-y-3.5 pt-2">
         <div>
-          <h2 className="text-base font-bold tracking-tight text-[#111827] dark:text-[#F9FAFB]">
+          <h2 className="text-base font-bold tracking-tight text-[var(--color-foreground)]">
             Messaging
           </h2>
-          <p className="mt-0.5 text-xs text-[#6B7280] dark:text-[var(--color-muted)]">
-            Chat with your AI CMO directly from your phone
+          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+            Chat with your AI CMO directly from your phone.
           </p>
         </div>
 
@@ -1073,10 +1235,10 @@ export function IntegrationsHub({
       {/* SECTION 4: SOCIAL & COMMUNITY DISTRIBUTION (REDDIT & X) */}
       <section className="space-y-3.5 pt-2">
         <div>
-          <h2 className="text-base font-bold tracking-tight text-[#111827] dark:text-[#F9FAFB]">
+          <h2 className="text-base font-bold tracking-tight text-[var(--color-foreground)]">
             Social &amp; Community Distribution
           </h2>
-          <p className="mt-0.5 text-xs text-[#6B7280] dark:text-[var(--color-muted)]">
+          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
             AI monitors high-intent discussions and drafts responses for Reddit &amp; X. Choose between <strong>1-click copy &amp; paste suggestions</strong> (zero API credentials needed) or <strong>direct auto-posting</strong> via API.
           </p>
         </div>
@@ -1089,32 +1251,32 @@ export function IntegrationsHub({
       {/* INTERACTIVE CONNECTION / CONFIGURATION MODAL */}
       {activeModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
           onClick={() => !loading && setActiveModal(null)}
         >
           <div
-            className="relative w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-2xl dark:border-[var(--color-border)] dark:bg-[var(--color-surface)] sm:p-7"
+            className="relative w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-2xl sm:p-7"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
             <button
               type="button"
               onClick={() => setActiveModal(null)}
-              className="absolute right-4 top-4 rounded-md p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+              className="absolute right-4 top-4 rounded-md p-1 text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             >
               <X size={18} />
             </button>
 
             {/* Modal Header */}
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-2 dark:border-neutral-700 dark:bg-neutral-800">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-2">
                 {activeModal.icon("w-6 h-6 object-contain")}
               </div>
               <div>
-                <h3 className="text-base font-bold text-[#111827] dark:text-[#F9FAFB]">
+                <h3 className="text-base font-bold text-[var(--color-foreground)]">
                   {activeModal.isConnected ? `Manage ${activeModal.title}` : `Connect ${activeModal.title}`}
                 </h3>
-                <p className="text-xs text-[#6B7280] dark:text-[var(--color-muted)]">
+                <p className="text-xs text-[var(--color-muted)]">
                   {activeModal.description}
                 </p>
               </div>
@@ -1124,12 +1286,12 @@ export function IntegrationsHub({
               <div
                 className={`mt-4 rounded-lg p-3 text-xs flex items-center gap-2 ${
                   modalFeedback.type === "success"
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    : "bg-red-50 text-red-700 border border-red-200"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
                 }`}
               >
                 {modalFeedback.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-                <span>{modalFeedback.message}</span>
+                <span className="flex-1 leading-snug">{modalFeedback.message}</span>
               </div>
             )}
 
@@ -1137,7 +1299,7 @@ export function IntegrationsHub({
             <form onSubmit={handleConnectSubmit} className="mt-5 space-y-4 text-xs">
               {activeModal.modalFields.map((field) => (
                 <div key={field.id}>
-                  <label className="block font-semibold text-[#374151] dark:text-neutral-200">
+                  <label className="block font-semibold text-[var(--color-foreground)]">
                     {field.label} {field.required && <span className="text-red-500">*</span>}
                   </label>
 
@@ -1147,7 +1309,7 @@ export function IntegrationsHub({
                       onChange={(e) =>
                         setFormValues((prev) => ({ ...prev, [field.id]: e.target.value }))
                       }
-                      className="mt-1.5 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-xs text-[#111827] focus:border-black focus:outline-none dark:border-[var(--color-border)] dark:bg-[var(--color-surface-muted)] dark:text-neutral-100"
+                      className="mt-1.5 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-foreground)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
                     >
                       {field.options?.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -1164,43 +1326,72 @@ export function IntegrationsHub({
                       onChange={(e) =>
                         setFormValues((prev) => ({ ...prev, [field.id]: e.target.value }))
                       }
-                      className="mt-1.5 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-mono text-[#111827] focus:border-black focus:outline-none dark:border-[var(--color-border)] dark:bg-[var(--color-surface-muted)] dark:text-neutral-100"
+                      className="mt-1.5 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs font-mono text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]/60 focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
                     />
                   )}
 
                   {field.helperText && (
-                    <p className="mt-1 text-[11px] text-[#6B7280] dark:text-[var(--color-muted)]">
+                    <p className="mt-1 text-[11px] text-[var(--color-muted)]">
                       {field.helperText}
                     </p>
                   )}
                 </div>
               ))}
 
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#E5E7EB] dark:border-[var(--color-border)]">
-                {activeModal.isConnected ? (
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => handleDisconnect(activeModal)}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                  >
-                    <Trash2 size={13} />
-                    <span>Disconnect</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal(null)}
-                    className="rounded-lg px-3 py-2 text-xs font-medium text-[#6B7280] hover:text-[#111827] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
+              {/* Test Digest Feedback Banner for Telegram */}
+              {activeModal.provider === "telegram" && testDigestFeedback && (
+                <div
+                  className={`rounded-lg p-2.5 text-xs flex items-center gap-2 ${
+                    testDigestFeedback.ok
+                      ? "bg-emerald-500/10 text-emerald-800 border border-emerald-500/20"
+                      : "bg-red-500/10 text-red-800 border border-red-500/20"
+                  }`}
+                >
+                  {testDigestFeedback.ok ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertCircle size={14} className="text-red-600" />}
+                  <span className="flex-1 text-[11px]">{testDigestFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--color-border)]">
+                <div className="flex items-center gap-2">
+                  {activeModal.isConnected ? (
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleDisconnect(activeModal)}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 size={13} />
+                      <span>Disconnect</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="rounded-lg px-3 py-2 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  )}
+
+                  {activeModal.provider === "telegram" && (
+                    <button
+                      type="button"
+                      disabled={testingDigest || !formValues.chatId}
+                      onClick={handleTestTelegramDigest}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 px-3 py-2 text-xs font-semibold hover:bg-sky-100 transition-colors disabled:opacity-50"
+                      title="Send a sample daily SEO digest with live GSC, Keywords & AI data to this Telegram chat immediately"
+                    >
+                      <Send size={12} className={testingDigest ? "animate-spin" : ""} />
+                      <span>{testingDigest ? "Sending..." : "⚡ Send Live Test Digest"}</span>
+                    </button>
+                  )}
+                </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex items-center gap-1.5 rounded-lg bg-[#111827] px-5 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] dark:bg-white dark:text-black dark:hover:bg-neutral-200 transition-colors shadow-xs disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-5 py-2 text-xs font-semibold text-[var(--color-primary-fg)] hover:bg-[var(--color-primary-hover)] transition-colors shadow-xs disabled:opacity-50"
                 >
                   {loading ? (
                     <Loader2 size={14} className="animate-spin" />

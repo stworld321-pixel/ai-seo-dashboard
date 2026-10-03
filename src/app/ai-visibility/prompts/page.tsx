@@ -12,6 +12,8 @@ import { ensureAiVisibilityData } from "@/server/services/ai-visibility";
 import { prisma } from "@/server/db";
 import { ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 
+import { PromptsTableClient } from "@/components/prompts-table-client";
+
 export const dynamic = "force-dynamic";
 
 export default async function PromptsTrackerPage(props: {
@@ -96,96 +98,9 @@ export default async function PromptsTrackerPage(props: {
             subtitle={`${prompts.length} prompts configured for automated testing and historical citation tracking`}
           />
 
-          <DataTable
-            rows={prompts}
-            getKey={(r) => r.id}
-            empty="No prompts added yet. Use the form above to add or discover prompts."
-            columns={[
-              {
-                key: "text",
-                header: "Prompt / Inquiry",
-                render: (r) => (
-                  <div className="space-y-0.5 max-w-md">
-                    <Link
-                      href={`/ai-visibility/prompts/${r.id}`}
-                      className="font-medium text-sm hover:text-[var(--color-primary)] hover:underline"
-                    >
-                      {r.text}
-                    </Link>
-                    <div className="flex items-center gap-2 text-[11px] text-[var(--color-muted)]">
-                      <span className="uppercase">{r.intent || "informational"}</span>
-                      <span>·</span>
-                      <span>Source: {r.source}</span>
-                    </div>
-                  </div>
-                ),
-              },
-              {
-                key: "priority",
-                header: "Priority",
-                render: (r) => (
-                  <StatusBadge
-                    status={r.priority === 3 ? "High" : r.priority === 2 ? "Medium" : "Low"}
-                    tone={r.priority === 3 ? "danger" : r.priority === 2 ? "warning" : "neutral"}
-                  />
-                ),
-              },
-              {
-                key: "approval",
-                header: "Approval",
-                render: (r) => (
-                  <span className={`inline-flex items-center gap-1 text-xs font-medium ${r.approved ? "text-[var(--color-success)]" : "text-amber-600"}`}>
-                    {r.approved ? <CheckCircle size={14} /> : <XCircle size={14} />}
-                    {r.approved ? "Approved" : "Needs Review"}
-                  </span>
-                ),
-              },
-              {
-                key: "recentRuns",
-                header: "Recent Results",
-                render: (r) => {
-                  if (r.runs.length === 0) {
-                    return <span className="text-xs text-[var(--color-muted)]">Not tested yet</span>;
-                  }
-                  return (
-                    <div className="flex flex-wrap gap-1">
-                      {r.runs.map((run) => (
-                        <span
-                          key={run.id}
-                          title={`${run.engine}: ${run.citationFound ? "Cited" : run.brandMentioned ? "Mentioned" : "Not Mentioned"}`}
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                            run.citationFound
-                              ? "bg-green-500/10 text-[var(--color-success)]"
-                              : run.brandMentioned
-                              ? "bg-blue-500/10 text-[var(--color-info)]"
-                              : "bg-[var(--color-surface-muted)] text-[var(--color-muted)]"
-                          }`}
-                        >
-                          {run.engine.slice(0, 4)}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                },
-              },
-              {
-                key: "actions",
-                header: "Actions",
-                align: "right",
-                render: (r) => (
-                  <div className="flex items-center justify-end gap-2">
-                    <PromptRunButton promptId={r.id} websiteId={website.id} promptText={r.text} />
-                    <Link
-                      href={`/ai-visibility/prompts/${r.id}`}
-                      className="rounded border border-[var(--color-border)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--color-surface-muted)]"
-                    >
-                      Detail
-                    </Link>
-                  </div>
-                ),
-              },
-            ]}
-          />
+          <div className="p-4">
+            <PromptsTableClient initialPrompts={prompts} websiteId={website.id} />
+          </div>
         </Card>
       </div>
     </>

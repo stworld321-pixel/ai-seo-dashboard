@@ -215,6 +215,17 @@ export async function requestIndexing(
     return { results: [], error: "Google is not connected. Connect it under Integrations." };
   }
 
+  const [googleConn, selectedGsc] = await Promise.all([
+    prisma.googleConnection.findFirst({
+      where: { websiteId, status: "connected" },
+      select: { email: true },
+    }),
+    prisma.gscProperty.findFirst({
+      where: { websiteId, isSelected: true },
+      select: { propertyUrl: true, permissionLevel: true },
+    }),
+  ]);
+
   const results = await Promise.all(
     urls.slice(0, 100).map(async (url): Promise<IndexSubmission> => {
       try {
@@ -227,18 +238,74 @@ export async function requestIndexing(
 
         if (res.ok) return { url, ok: true };
 
+        const rawText = await res.text();
+        let errJson: {
+          error?: {
+            code?: number;
+            message?: string;
+            status?: string;
+            details?: Array<{
+              reason?: string;
+              metadata?: { activationUrl?: string; consumer?: string };
+            }>;
+          };
+        } | null = null;
+
+        try {
+          errJson = JSON.parse(rawText);
+        } catch {
+          // not JSON
+        }
+
+        const rawMsg = errJson?.error?.message || "";
+        const serviceDisabled =
+          errJson?.error?.details?.some((d) => d.reason === "SERVICE_DISABLED") ||
+          rawMsg.includes("disabled") ||
+          rawMsg.includes("has not been used in project");
+
+        if (serviceDisabled) {
+          const activationUrl =
+            errJson?.error?.details?.[0]?.metadata?.activationUrl ||
+            "https://console.developers.google.com/apis/api/indexing.googleapis.com/overview?project=733221266774";
+          return {
+            url,
+            ok: false,
+            error: `Web Search Indexing API is disabled in Google Cloud Project 733221266774. Please enable it at: ${activationUrl}`,
+          };
+        }
+
         if (res.status === 403) {
+          if (
+            selectedGsc?.permissionLevel &&
+            selectedGsc.permissionLevel !== "siteOwner"
+          ) {
+            const roleName =
+              selectedGsc.permissionLevel === "siteFullUser"
+                ? "Full User"
+                : selectedGsc.permissionLevel === "siteRestrictedUser"
+                  ? "Restricted User"
+                  : selectedGsc.permissionLevel;
+            return {
+              url,
+              ok: false,
+              error: `Permission denied: Google account ${googleConn?.email ? `(${googleConn.email}) ` : ""}is a "${roleName}" on ${selectedGsc.propertyUrl || "this site"} in Search Console. Google Indexing API strictly requires verified "Owner" permissions. In Search Console Settings → Users and permissions, grant Owner access.`,
+            };
+          }
+
           return {
             url,
             ok: false,
             error:
-              "Permission denied. The connected Google account must be a verified OWNER of this property and the Indexing API must be enabled. Reconnect Google to grant the indexing scope.",
+              rawMsg ||
+              "Permission denied. The connected Google account must be a verified OWNER of this property in Google Search Console and granted the Indexing scope.",
           };
         }
+
         if (res.status === 429) {
           return { url, ok: false, error: "Daily Indexing API quota exhausted (200 URLs/day). Try again tomorrow." };
         }
-        return { url, ok: false, error: `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}` };
+
+        return { url, ok: false, error: rawMsg || `HTTP ${res.status}: ${rawText.slice(0, 200)}` };
       } catch (err) {
         return { url, ok: false, error: err instanceof Error ? err.message : "Submission failed." };
       }

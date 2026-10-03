@@ -13,6 +13,9 @@ import {
   Copy,
   Eye,
   Check,
+  X,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { StatusBadge } from "./badges";
 import { XDraftModal } from "./x-draft-modal";
@@ -26,13 +29,30 @@ interface XAgentViewProps {
 export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps) {
   const router = useRouter();
   const [opportunities, setOpportunities] = useState<XOpportunityItem[]>(initialOpportunities);
-  const [activeTab, setActiveTab] = useState<"all" | "drafts" | "posted">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "active" | "drafts" | "posted" | "dismissed">("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedOpp, setSelectedOpp] = useState<XOpportunityItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function handleUpdateXStatus(oppId: string, status: "new" | "posted" | "dismissed") {
+    try {
+      const res = await fetch("/api/x-agent/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId: oppId, status }),
+      });
+      if (res.ok) {
+        setOpportunities((prev) =>
+          prev.map((o) => (o.id === oppId ? { ...o, status } : o)),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to update X status", err);
+    }
+  }
 
   async function handleScanOpportunities() {
     setIsScanning(true);
@@ -97,8 +117,10 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
   }
 
   const filteredOpps = opportunities.filter((o) => {
-    if (activeTab === "drafts" && !o.draftContent) return false;
+    if (activeTab === "active" && (o.status === "dismissed" || o.status === "posted")) return false;
+    if (activeTab === "drafts" && (!o.draftContent || o.status === "dismissed")) return false;
     if (activeTab === "posted" && o.status !== "posted") return false;
+    if (activeTab === "dismissed" && o.status !== "dismissed") return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -113,8 +135,10 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
   });
 
   const totalCount = opportunities.length;
-  const readyCount = opportunities.filter((o) => o.draftContent).length;
+  const activeCount = opportunities.filter((o) => o.status !== "dismissed" && o.status !== "posted").length;
+  const readyCount = opportunities.filter((o) => o.draftContent && o.status !== "dismissed").length;
   const postedCount = opportunities.filter((o) => o.status === "posted").length;
+  const dismissedCount = opportunities.filter((o) => o.status === "dismissed").length;
 
   return (
     <div className="space-y-6">
@@ -126,7 +150,7 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight">X (Twitter) Influencer &amp; Authority Agent</h1>
+              <h1 className="text-xl font-bold tracking-tight">X (Twitter) Growth &amp; Authority Agent</h1>
               <span className="inline-flex items-center gap-1 rounded bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-[var(--color-success)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-success)]" />
                 Active Monitor
@@ -200,14 +224,14 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={() => setActiveTab("all")}
+            onClick={() => setActiveTab("active")}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              activeTab === "all"
+              activeTab === "active"
                 ? "bg-[var(--color-primary)] text-white"
                 : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             }`}
           >
-            All Creators ({opportunities.length})
+            Active ({activeCount})
           </button>
           <button
             type="button"
@@ -229,7 +253,29 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
                 : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             }`}
           >
-            Verified Posted ({postedCount})
+            Done / Posted ({postedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("dismissed")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              activeTab === "dismissed"
+                ? "bg-[var(--color-primary)] text-white"
+                : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+            }`}
+          >
+            Dismissed ({dismissedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("all")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              activeTab === "all"
+                ? "bg-[var(--color-primary)] text-white"
+                : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+            }`}
+          >
+            All Creators ({totalCount})
           </button>
         </div>
 
@@ -256,6 +302,7 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
             const isGenerating = generatingId === opp.id;
             const hasDraft = Boolean(opp.draftContent);
             const isPosted = opp.status === "posted";
+            const isDismissed = opp.status === "dismissed";
 
             return (
               <div key={opp.id} className="p-5 hover:bg-[var(--color-surface-muted)] transition-colors space-y-3">
@@ -270,6 +317,12 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
                         <span className="inline-flex items-center gap-1 rounded bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-success)]">
                           <CheckCircle2 size={12} />
                           Verified Posted
+                        </span>
+                      )}
+                      {isDismissed && (
+                        <span className="inline-flex items-center gap-1 rounded bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-muted)]">
+                          <XCircle size={12} />
+                          Dismissed
                         </span>
                       )}
                     </div>
@@ -302,6 +355,39 @@ export function XAgentView({ websiteId, initialOpportunities }: XAgentViewProps)
                         <span>View on X</span>
                         <ExternalLink size={12} />
                       </a>
+                    )}
+
+                    {isPosted || isDismissed ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateXStatus(opp.id, "new")}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] transition-colors"
+                        title="Reopen / restore to active"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Restore</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateXStatus(opp.id, "posted")}
+                          className="inline-flex items-center gap-1 rounded border border-green-500/20 bg-green-500/5 px-2.5 py-1.5 text-xs font-medium text-[var(--color-success)] hover:bg-green-500/15 transition-colors"
+                          title="Mark as done / posted"
+                        >
+                          <Check size={12} />
+                          <span>Done</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateXStatus(opp.id, "dismissed")}
+                          className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-red-500 hover:border-red-500/30 transition-colors"
+                          title="Dismiss this opportunity"
+                        >
+                          <X size={12} />
+                          <span>Dismiss</span>
+                        </button>
+                      </>
                     )}
 
                     {hasDraft ? (

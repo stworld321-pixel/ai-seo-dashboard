@@ -13,6 +13,9 @@ import {
   Copy,
   Eye,
   Check,
+  X,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { StatusBadge } from "./badges";
 import { RedditDraftModal } from "./reddit-draft-modal";
@@ -26,13 +29,30 @@ interface RedditAgentViewProps {
 export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgentViewProps) {
   const router = useRouter();
   const [opportunities, setOpportunities] = useState<RedditOpportunityItem[]>(initialOpportunities);
-  const [activeTab, setActiveTab] = useState<"all" | "drafts" | "posted">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "active" | "drafts" | "posted" | "dismissed">("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedOpp, setSelectedOpp] = useState<RedditOpportunityItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function handleUpdateRedditStatus(oppId: string, status: "new" | "posted" | "dismissed") {
+    try {
+      const res = await fetch("/api/reddit-agent/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId: oppId, status }),
+      });
+      if (res.ok) {
+        setOpportunities((prev) =>
+          prev.map((o) => (o.id === oppId ? { ...o, status } : o)),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to update Reddit status", err);
+    }
+  }
 
   async function handleScanDiscussions() {
     setIsScanning(true);
@@ -97,8 +117,10 @@ export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgent
   }
 
   const filteredOpps = opportunities.filter((o) => {
-    if (activeTab === "drafts" && !o.draftResponse) return false;
+    if (activeTab === "active" && (o.status === "dismissed" || o.status === "posted")) return false;
+    if (activeTab === "drafts" && (!o.draftResponse || o.status === "dismissed")) return false;
     if (activeTab === "posted" && o.status !== "posted") return false;
+    if (activeTab === "dismissed" && o.status !== "dismissed") return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -113,8 +135,10 @@ export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgent
   });
 
   const totalCount = opportunities.length;
-  const readyCount = opportunities.filter((o) => o.draftResponse).length;
+  const activeCount = opportunities.filter((o) => o.status !== "dismissed" && o.status !== "posted").length;
+  const readyCount = opportunities.filter((o) => o.draftResponse && o.status !== "dismissed").length;
   const postedCount = opportunities.filter((o) => o.status === "posted").length;
+  const dismissedCount = opportunities.filter((o) => o.status === "dismissed").length;
   const totalEngagement = opportunities.reduce((acc, o) => acc + o.engagement, 0);
 
   return (
@@ -201,14 +225,14 @@ export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgent
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={() => setActiveTab("all")}
+            onClick={() => setActiveTab("active")}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              activeTab === "all"
+              activeTab === "active"
                 ? "bg-[var(--color-primary)] text-white"
                 : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             }`}
           >
-            All Discussions ({opportunities.length})
+            Active ({activeCount})
           </button>
           <button
             type="button"
@@ -230,7 +254,29 @@ export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgent
                 : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             }`}
           >
-            Verified Posted ({postedCount})
+            Done / Posted ({postedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("dismissed")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              activeTab === "dismissed"
+                ? "bg-[var(--color-primary)] text-white"
+                : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+            }`}
+          >
+            Dismissed ({dismissedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("all")}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              activeTab === "all"
+                ? "bg-[var(--color-primary)] text-white"
+                : "bg-[var(--color-surface-muted)] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+            }`}
+          >
+            All ({totalCount})
           </button>
         </div>
 
@@ -257,6 +303,7 @@ export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgent
             const isGenerating = generatingId === opp.id;
             const hasDraft = Boolean(opp.draftResponse);
             const isPosted = opp.status === "posted";
+            const isDismissed = opp.status === "dismissed";
 
             return (
               <div key={opp.id} className="p-5 hover:bg-[var(--color-surface-muted)] transition-colors space-y-3">
@@ -274,6 +321,12 @@ export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgent
                         <span className="inline-flex items-center gap-1 rounded bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-success)]">
                           <CheckCircle2 size={12} />
                           Verified Posted
+                        </span>
+                      )}
+                      {isDismissed && (
+                        <span className="inline-flex items-center gap-1 rounded bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-muted)]">
+                          <XCircle size={12} />
+                          Dismissed
                         </span>
                       )}
                     </div>
@@ -299,6 +352,39 @@ export function RedditAgentView({ websiteId, initialOpportunities }: RedditAgent
                       <span>Reddit Thread</span>
                       <ExternalLink size={12} />
                     </a>
+
+                    {isPosted || isDismissed ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateRedditStatus(opp.id, "new")}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] transition-colors"
+                        title="Reopen / restore to active"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Restore</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateRedditStatus(opp.id, "posted")}
+                          className="inline-flex items-center gap-1 rounded border border-green-500/20 bg-green-500/5 px-2.5 py-1.5 text-xs font-medium text-[var(--color-success)] hover:bg-green-500/15 transition-colors"
+                          title="Mark as done / posted"
+                        >
+                          <Check size={12} />
+                          <span>Done</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateRedditStatus(opp.id, "dismissed")}
+                          className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-red-500 hover:border-red-500/30 transition-colors"
+                          title="Dismiss this opportunity"
+                        >
+                          <X size={12} />
+                          <span>Dismiss</span>
+                        </button>
+                      </>
+                    )}
 
                     {hasDraft ? (
                       <>

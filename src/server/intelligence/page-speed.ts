@@ -24,16 +24,24 @@ export type PageSpeedData = {
   url: string;
   /** PSI performance score 0–100, null if not available */
   performanceScore: number | null;
+  /** Accessibility score 0-100 */
+  accessibilityScore?: number | null;
+  /** Best Practices score 0-100 */
+  bestPracticesScore?: number | null;
+  /** SEO score 0-100 */
+  seoScore?: number | null;
   /** Largest Contentful Paint in seconds */
   lcp: number | null;
+  /** First Contentful Paint in seconds */
+  fcp: number | null;
+  /** Total Blocking Time in milliseconds */
+  tbt?: number | null;
   /** Interaction to Next Paint in milliseconds */
   inp: number | null;
   /** Cumulative Layout Shift (unitless) */
   cls: number | null;
   /** Time to First Byte in seconds */
   ttfb: number | null;
-  /** First Contentful Paint in seconds */
-  fcp: number | null;
   /** Mobile or desktop */
   strategy: "mobile" | "desktop";
 };
@@ -211,13 +219,17 @@ export type PSIResponse = {
   lighthouseResult?: {
     categories?: {
       performance?: { score: number | null };
+      accessibility?: { score: number | null };
+      "best-practices"?: { score: number | null };
+      seo?: { score: number | null };
     };
     audits?: {
       "largest-contentful-paint"?: PSILighthouseAudit;
+      "first-contentful-paint"?: PSILighthouseAudit;
+      "total-blocking-time"?: PSILighthouseAudit;
       "interaction-to-next-paint"?: PSILighthouseAudit;
       "cumulative-layout-shift"?: PSILighthouseAudit;
       "server-response-time"?: PSILighthouseAudit;
-      "first-contentful-paint"?: PSILighthouseAudit;
     };
   };
   error?: { code: number; message: string };
@@ -236,13 +248,17 @@ export async function fetchPSI(
   apiKey?: string,
 ): Promise<PageSpeedData | null> {
   const key = apiKey ?? process.env.GOOGLE_PSI_API_KEY?.trim();
-  if (!key) return null;
 
   const endpoint = new URL("https://www.googleapis.com/pagespeedonline/v5/runPagespeed");
   endpoint.searchParams.set("url", url);
   endpoint.searchParams.set("strategy", strategy.toUpperCase());
-  endpoint.searchParams.set("key", key);
-  endpoint.searchParams.set("category", "PERFORMANCE");
+  if (key) {
+    endpoint.searchParams.set("key", key);
+  }
+  endpoint.searchParams.append("category", "PERFORMANCE");
+  endpoint.searchParams.append("category", "ACCESSIBILITY");
+  endpoint.searchParams.append("category", "BEST_PRACTICES");
+  endpoint.searchParams.append("category", "SEO");
 
   // PSI can take 20–45s. We try twice before giving up.
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -269,13 +285,27 @@ export async function fetchPSI(
 
       const audits = lr.audits ?? {};
       const perfScore = lr.categories?.performance?.score ?? null;
+      const accessScore = lr.categories?.accessibility?.score ?? null;
+      const bpScore = lr.categories?.["best-practices"]?.score ?? null;
+      const seoScore = lr.categories?.seo?.score ?? null;
 
       return {
         url,
         performanceScore: perfScore !== null ? Math.round(perfScore * 100) : null,
+        accessibilityScore: accessScore !== null ? Math.round(accessScore * 100) : null,
+        bestPracticesScore: bpScore !== null ? Math.round(bpScore * 100) : null,
+        seoScore: seoScore !== null ? Math.round(seoScore * 100) : null,
         // PSI returns numericValue in ms for LCP and FCP — convert to seconds
         lcp: audits["largest-contentful-paint"]?.numericValue != null
           ? Number((audits["largest-contentful-paint"].numericValue! / 1000).toFixed(3))
+          : null,
+        // FCP is in ms — convert to seconds
+        fcp: audits["first-contentful-paint"]?.numericValue != null
+          ? Number((audits["first-contentful-paint"].numericValue! / 1000).toFixed(3))
+          : null,
+        // Total Blocking Time in ms
+        tbt: audits["total-blocking-time"]?.numericValue != null
+          ? Math.round(audits["total-blocking-time"].numericValue!)
           : null,
         // INP is already in ms
         inp: audits["interaction-to-next-paint"]?.numericValue != null
@@ -288,10 +318,6 @@ export async function fetchPSI(
         // TTFB is in ms — convert to seconds
         ttfb: audits["server-response-time"]?.numericValue != null
           ? Number((audits["server-response-time"].numericValue! / 1000).toFixed(3))
-          : null,
-        // FCP is in ms — convert to seconds
-        fcp: audits["first-contentful-paint"]?.numericValue != null
-          ? Number((audits["first-contentful-paint"].numericValue! / 1000).toFixed(3))
           : null,
         strategy,
       };

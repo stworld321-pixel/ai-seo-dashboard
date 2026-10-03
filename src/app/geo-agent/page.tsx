@@ -37,17 +37,17 @@ export default async function GeoAgentPage(props: {
           dataThrough={window.to.toISOString().slice(0, 10)}
         />
         <FeatureLockedGate
-          featureName="Autonomous GEO Agent"
-          featureDescription="Generative Engine Optimization (GEO) monitors local, regional, and national citation prominence across Google AI Overviews, Perplexity, and ChatGPT Search to bridge local entity gaps."
-          requiredPlan="Pro ⭐"
-          price="$79/mo"
+          featureName="GEO Agent (Generative Engine Optimization)"
+          featureDescription="Track up to 15 AI search prompts, monitor mentions + citation visibility across ChatGPT & Perplexity, audit competitor AI visibility, and generate autonomous AI recommendations."
+          requiredPlan={access.requiredPlan}
+          price={access.price}
           benefits={[
-            "Hyperlocal AI citation & multi-city entity detection",
-            "Automated schema & NAP consistency recommendations",
-            "Regional competitor gap analysis & prompt auditing",
-            "One-click sync to WordPress and regional landing pages",
+            "Track up to 15 AI search prompts & engine citations",
+            "Mentions & brand citation visibility across ChatGPT & Perplexity",
+            "Competitor AI visibility & multi-LLM benchmark scores",
+            "Autonomous AI visibility & local entity recommendations",
           ]}
-          previewSnippet="Detected 12 regional citation gaps across target cities. Generated localized schema markup & directory entity anchors."
+          previewSnippet="GEO Agent active: Audited 15 target prompts across ChatGPT & Perplexity. Generated citation schemas & entity anchors."
         />
       </>
     );

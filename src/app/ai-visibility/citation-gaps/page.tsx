@@ -7,6 +7,8 @@ import { loadPageContext } from "@/server/services/page-context";
 import { prisma } from "@/server/db";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 
+import { CitationGapsClientView } from "@/components/citation-gaps-client-view";
+
 export const dynamic = "force-dynamic";
 
 export default async function CitationGapsPage(props: {
@@ -47,6 +49,7 @@ export default async function CitationGapsPage(props: {
         promptText: p.text,
         intent: p.intent,
         priority: p.priority,
+        status: p.status || "active",
         competitorCited: competitor,
         citedSource: topSource,
         brandStatus: latestRun.brandMentioned ? "Mentioned only (No link)" : "Not mentioned",
@@ -90,64 +93,9 @@ export default async function CitationGapsPage(props: {
             subtitle="Prioritized recommendations to earn direct citations in AI answer engines"
           />
 
-          <DataTable
-            rows={gaps}
-            getKey={(r) => r.id}
-            empty="No citation gaps detected yet. Run prompt tests under Prompt Tracker to evaluate competitors."
-            columns={[
-              {
-                key: "prompt",
-                header: "Prompt",
-                render: (r) => (
-                  <div className="space-y-0.5 max-w-xs">
-                    <p className="font-medium text-xs">{r.promptText}</p>
-                    <span className="text-[10px] text-[var(--color-muted)] uppercase">{r.intent}</span>
-                  </div>
-                ),
-              },
-              {
-                key: "competitor",
-                header: "Competitor Cited",
-                render: (r) => <span className="text-xs font-semibold text-amber-600">{r.competitorCited}</span>,
-              },
-              {
-                key: "source",
-                header: "Cited Source Domain",
-                render: (r) => <span className="font-mono text-xs text-[var(--color-foreground)]">{r.citedSource}</span>,
-              },
-              {
-                key: "brandStatus",
-                header: "Our Status",
-                render: (r) => (
-                  <StatusBadge
-                    status={r.brandStatus}
-                    tone={r.brandStatus.includes("Mentioned") ? "warning" : "danger"}
-                  />
-                ),
-              },
-              {
-                key: "recommendation",
-                header: "Actionable Opportunity",
-                render: (r) => (
-                  <div className="space-y-1 text-xs max-w-sm">
-                    <p className="text-[var(--color-foreground)] font-medium">• {r.recommendedContent}</p>
-                    <p className="text-[var(--color-muted)]">• {r.recommendedExternalAuthority}</p>
-                  </div>
-                ),
-              },
-              {
-                key: "priority",
-                header: "Priority",
-                align: "right",
-                render: (r) => (
-                  <StatusBadge
-                    status={r.priority === 3 ? "High" : "Medium"}
-                    tone={r.priority === 3 ? "danger" : "neutral"}
-                  />
-                ),
-              },
-            ]}
-          />
+          <div className="p-4">
+            <CitationGapsClientView initialGaps={gaps} />
+          </div>
         </Card>
       </div>
     </>

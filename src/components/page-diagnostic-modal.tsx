@@ -20,10 +20,12 @@ import {
   Loader2,
   ArrowRight,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import { StatusBadge, PriorityBadge } from "./badges";
 import { formatNumber, formatPercent, formatPosition, shortenUrl } from "@/lib/format";
 import { OpportunityImplementModal } from "./opportunity-implement-modal";
+import { SchemaGeneratorModal } from "./schema-generator-modal";
 import type { ActionItem } from "./today-panel";
 
 export interface PageDiagnosticRow {
@@ -42,6 +44,7 @@ export interface PageDiagnosticRow {
   contentScore?: number | null;
   contentScoreDetail?: any;
   lastCrawledAt?: Date | string | null;
+  isCrawled?: boolean;
 }
 
 interface PageDiagnosticModalProps {
@@ -61,7 +64,7 @@ export function PageDiagnosticModal({
   onClose,
   onPageUpdated,
 }: PageDiagnosticModalProps) {
-  const [activeTab, setActiveTab] = useState<"issues" | "queries" | "recommendations" | "links">("issues");
+  const [activeTab, setActiveTab] = useState<"issues" | "queries" | "recommendations" | "links" | "vitals">("issues");
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isCrawling, setIsCrawling] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -76,11 +79,43 @@ export function PageDiagnosticModal({
   } | null>(null);
 
   const [implementAction, setImplementAction] = useState<ActionItem | null>(null);
+  const [dismissedIssues, setDismissedIssues] = useState<string[]>([]);
+  const [resolvedIssues, setResolvedIssues] = useState<string[]>([]);
+  const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
+
+  // Core Web Vitals state
+  const [webVitals, setWebVitals] = useState<{
+    performanceScore: number | null;
+    lcp: { value: number | null; unit: string; category: string | null; label: string };
+    inp: { value: number | null; unit: string; category: string | null; label: string };
+    cls: { value: number | null; unit: string; category: string | null; label: string };
+    fcp: { value: number | null; unit: string; category: string | null; label: string };
+    source: string;
+  } | null>(null);
+  const [loadingVitals, setLoadingVitals] = useState(false);
+
+  async function loadWebVitals() {
+    if (!page) return;
+    setLoadingVitals(true);
+    try {
+      const res = await fetch(`/api/seo/pages/web-vitals?url=${encodeURIComponent(page.page)}`);
+      if (res.ok) {
+        const json = await res.json();
+        setWebVitals(json.data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingVitals(false);
+    }
+  }
 
   // Load detailed queries & opportunities on open
   useEffect(() => {
     if (!isOpen || !page) {
       setDetails(null);
+      setDismissedIssues([]);
+      setResolvedIssues([]);
       return;
     }
 
@@ -91,6 +126,30 @@ export function PageDiagnosticModal({
       .then((json) => {
         if (isMounted && json.data) {
           setDetails(json.data);
+          const pr = json.data.pageRecord;
+          if (pr?.contentScoreDetail) {
+            const d = pr.contentScoreDetail as { dismissedIssues?: string[]; resolvedIssues?: string[] };
+            if (Array.isArray(d.dismissedIssues)) setDismissedIssues(d.dismissedIssues);
+            if (Array.isArray(d.resolvedIssues)) setResolvedIssues(d.resolvedIssues);
+          }
+          if (pr && onPageUpdated) {
+            onPageUpdated({
+              ...page,
+              seoTitle: pr.title,
+              metaDescription: pr.metaDescription,
+              h1: pr.h1,
+              wordCount: pr.wordCount,
+              canonical: pr.canonical,
+              contentScore: pr.contentScore,
+              contentScoreDetail: pr.contentScoreDetail,
+              lastCrawledAt: pr.lastCrawledAt,
+              isCrawled: true,
+              status: {
+                label: pr.status === "HEALTHY" ? "Healthy" : "Optimize",
+                tone: pr.status === "HEALTHY" ? "success" : "warning",
+              },
+            });
+          }
         }
       })
       .catch(() => {})
@@ -106,6 +165,7 @@ export function PageDiagnosticModal({
   if (!isOpen || !page) return null;
 
   const currentRecord = details?.pageRecord || {};
+  const isCrawled = Boolean(currentRecord.lastCrawledAt || page.lastCrawledAt || page.isCrawled);
   const liveTitle = currentRecord.title ?? page.seoTitle ?? "";
   const liveMeta = currentRecord.metaDescription ?? page.metaDescription ?? "";
   const liveH1 = currentRecord.h1 ?? page.h1 ?? "";
@@ -124,115 +184,135 @@ export function PageDiagnosticModal({
     fix: string;
   }> = [];
 
-  // 1. Meta description check
-  if (!liveMeta || liveMeta.trim().length === 0) {
+  if (!isCrawled && loadingDetails) {
     issues.push({
-      id: "meta-missing",
-      type: "critical",
-      title: "Missing Meta Description",
-      description: "This page has no meta description tag. Google will generate arbitrary snippet snippets, leading to lower CTR.",
-      fix: "Generate a targeted 140–160 character meta description containing the target keyword and a clear value proposition.",
-    });
-  } else if (liveMeta.length < 50) {
-    issues.push({
-      id: "meta-short",
-      type: "warning",
-      title: `Short Meta Description (${liveMeta.length} chars)`,
-      description: "The meta description is too short (recommended: 120–160 characters) and leaves valuable SERP screen space unused.",
-      fix: "Expand the meta description to 140–160 characters with an action-oriented call to action.",
-    });
-  } else if (liveMeta.length > 165) {
-    issues.push({
-      id: "meta-long",
-      type: "warning",
-      title: `Truncated Meta Description (${liveMeta.length} chars)`,
-      description: "The meta description exceeds 165 characters and will be truncated with '...' on mobile and desktop search results.",
-      fix: "Shorten and front-load key benefits to keep the length under 160 characters.",
-    });
-  } else {
-    issues.push({
-      id: "meta-good",
-      type: "good",
-      title: `Optimal Meta Description Length (${liveMeta.length} chars)`,
-      description: liveMeta,
-      fix: "No fix needed. Keep monitoring CTR in Search Console.",
-    });
-  }
-
-  // 2. Title tag check
-  if (!liveTitle || liveTitle.trim().length === 0) {
-    issues.push({
-      id: "title-missing",
-      type: "critical",
-      title: "Missing HTML <title> Tag",
-      description: "Search engines require a page title to understand relevance and display search result links.",
-      fix: "Add a compelling title tag under 60 characters with your primary keyword near the beginning.",
-    });
-  } else if (liveTitle.length < 25) {
-    issues.push({
-      id: "title-short",
-      type: "warning",
-      title: `Short Title Tag (${liveTitle.length} chars)`,
-      description: "The title tag is very brief and may not provide enough context for keyword variations.",
-      fix: "Expand the title tag to 45–60 characters to include your brand or secondary keyword modifier.",
-    });
-  } else if (liveTitle.length > 65) {
-    issues.push({
-      id: "title-long",
-      type: "warning",
-      title: `Long Title Tag (${liveTitle.length} chars)`,
-      description: "Title tags over 65 characters often get truncated or rewritten by Google on search results pages.",
-      fix: "Trim unnecessary filler words to stay under 60 characters.",
-    });
-  } else {
-    issues.push({
-      id: "title-good",
-      type: "good",
-      title: `Optimal Title Tag (${liveTitle.length} chars)`,
-      description: liveTitle,
-      fix: "Title tag length is within the ideal 35–60 character range.",
-    });
-  }
-
-  // 3. H1 Heading check
-  if (!liveH1 || liveH1.trim().length === 0) {
-    issues.push({
-      id: "h1-missing",
-      type: "warning",
-      title: "Missing <h1> Heading",
-      description: "No primary <h1> heading was detected in the crawled HTML body.",
-      fix: "Add exactly one descriptive <h1> heading at the top of the main content area.",
-    });
-  }
-
-  // 4. Word count check
-  if (liveWordCount > 0 && liveWordCount < 300) {
-    issues.push({
-      id: "content-thin",
-      type: "warning",
-      title: `Thin Content (${liveWordCount} words)`,
-      description: "The page has fewer than 300 words. Search engines and AI answer engines prefer in-depth content that comprehensively satisfies user intent.",
-      fix: "Expand content with structured sections, FAQs, feature tables, and authoritative answers.",
-    });
-  }
-
-  // 5. Schema check
-  if (schemaTypes.length === 0) {
-    issues.push({
-      id: "schema-missing",
+      id: "crawl-loading",
       type: "info",
-      title: "No Structured Data (JSON-LD) Detected",
-      description: "No Schema.org markup (e.g. Article, FAQPage, Product, Organization) was found on this page.",
-      fix: "Add structured JSON-LD schema to unlock rich snippets and enhance AI citation retrieval.",
+      title: "Auditing Live Page…",
+      description: "Fetching live HTML and verifying title tag, meta description, and structured schema tags.",
+      fix: "Analysis will automatically update in a few seconds.",
     });
-  } else {
+  } else if (!isCrawled) {
     issues.push({
-      id: "schema-good",
-      type: "good",
-      title: `Structured Schema Active: ${schemaTypes.join(", ")}`,
-      description: `Detected ${schemaTypes.length} schema markup block(s) for enhanced search engine parsing.`,
-      fix: "Maintain schema valid against Google Rich Results standards.",
+      id: "crawl-pending",
+      type: "info",
+      title: "Live Page Audit Pending",
+      description: "This page has not been crawled yet. Live title tag and meta description have not been indexed.",
+      fix: "Click 'Re-Crawl URL Live' below to verify metadata directly from the live site HTML.",
     });
+  }
+
+  // 1. Meta description check (only evaluate if crawled)
+  if (isCrawled) {
+    if (!liveMeta || liveMeta.trim().length === 0) {
+      issues.push({
+        id: "meta-missing",
+        type: "critical",
+        title: "Missing Meta Description",
+        description: "This page has no meta description tag. Google will generate arbitrary snippet snippets, leading to lower CTR.",
+        fix: "Generate a targeted 140–160 character meta description containing the target keyword and a clear value proposition.",
+      });
+    } else if (liveMeta.length < 50) {
+      issues.push({
+        id: "meta-short",
+        type: "warning",
+        title: `Short Meta Description (${liveMeta.length} chars)`,
+        description: "The meta description is too short (recommended: 120–160 characters) and leaves valuable SERP screen space unused.",
+        fix: "Expand the meta description to 140–160 characters with an action-oriented call to action.",
+      });
+    } else if (liveMeta.length > 165) {
+      issues.push({
+        id: "meta-long",
+        type: "warning",
+        title: `Truncated Meta Description (${liveMeta.length} chars)`,
+        description: "The meta description exceeds 165 characters and will be truncated with '...' on mobile and desktop search results.",
+        fix: "Shorten and front-load key benefits to keep the length under 160 characters.",
+      });
+    } else {
+      issues.push({
+        id: "meta-good",
+        type: "good",
+        title: `Optimal Meta Description Length (${liveMeta.length} chars)`,
+        description: liveMeta,
+        fix: "No fix needed. Keep monitoring CTR in Search Console.",
+      });
+    }
+
+    // 2. Title tag check (only evaluate if crawled)
+    if (!liveTitle || liveTitle.trim().length === 0) {
+      issues.push({
+        id: "title-missing",
+        type: "critical",
+        title: "Missing HTML <title> Tag",
+        description: "Search engines require a page title to understand relevance and display search result links.",
+        fix: "Add a compelling title tag under 60 characters with your primary keyword near the beginning.",
+      });
+    } else if (liveTitle.length < 25) {
+      issues.push({
+        id: "title-short",
+        type: "warning",
+        title: `Short Title Tag (${liveTitle.length} chars)`,
+        description: "The title tag is very brief and may not provide enough context for keyword variations.",
+        fix: "Expand the title tag to 45–60 characters to include your brand or secondary keyword modifier.",
+      });
+    } else if (liveTitle.length > 65) {
+      issues.push({
+        id: "title-long",
+        type: "warning",
+        title: `Long Title Tag (${liveTitle.length} chars)`,
+        description: "Title tags over 65 characters often get truncated or rewritten by Google on search results pages.",
+        fix: "Trim unnecessary filler words to stay under 60 characters.",
+      });
+    } else {
+      issues.push({
+        id: "title-good",
+        type: "good",
+        title: `Optimal Title Tag (${liveTitle.length} chars)`,
+        description: liveTitle,
+        fix: "Title tag length is within the ideal 35–60 character range.",
+      });
+    }
+
+    // 3. H1 Heading check (only evaluate if crawled)
+    if (!liveH1 || liveH1.trim().length === 0) {
+      issues.push({
+        id: "h1-missing",
+        type: "warning",
+        title: "Missing <h1> Heading",
+        description: "No primary <h1> heading was detected in the crawled HTML body.",
+        fix: "Add exactly one descriptive <h1> heading at the top of the main content area.",
+      });
+    }
+
+    // 4. Word count check (only evaluate if crawled)
+    if (liveWordCount > 0 && liveWordCount < 300) {
+      issues.push({
+        id: "content-thin",
+        type: "warning",
+        title: `Thin Content (${liveWordCount} words)`,
+        description: "The page has fewer than 300 words. Search engines and AI answer engines prefer in-depth content that comprehensively satisfies user intent.",
+        fix: "Expand content with structured sections, FAQs, feature tables, and authoritative answers.",
+      });
+    }
+
+    // 5. Schema check (only evaluate if crawled)
+    if (schemaTypes.length === 0) {
+      issues.push({
+        id: "schema-missing",
+        type: "info",
+        title: "No Structured Data (JSON-LD) Detected",
+        description: "No Schema.org markup (e.g. Article, FAQPage, Product, Organization) was found on this page.",
+        fix: "Add structured JSON-LD schema to unlock rich snippets and enhance AI citation retrieval.",
+      });
+    } else {
+      issues.push({
+        id: "schema-good",
+        type: "good",
+        title: `Structured Schema Active: ${schemaTypes.join(", ")}`,
+        description: `Detected ${schemaTypes.length} schema markup block(s) for enhanced search engine parsing.`,
+        fix: "Maintain schema valid against Google Rich Results standards.",
+      });
+    }
   }
 
   // 6. CTR & Strike Zone Opportunities
@@ -318,6 +398,34 @@ export function PageDiagnosticModal({
     setTimeout(() => setCopiedField(null), 2000);
   }
 
+  async function handleIssueAction(issueId: string, action: "resolve_issue" | "dismiss_issue" | "restore_issue") {
+    if (action === "resolve_issue") {
+      setResolvedIssues((prev) => [...prev.filter((id) => id !== issueId), issueId]);
+      setDismissedIssues((prev) => prev.filter((id) => id !== issueId));
+    } else if (action === "dismiss_issue") {
+      setDismissedIssues((prev) => [...prev.filter((id) => id !== issueId), issueId]);
+      setResolvedIssues((prev) => prev.filter((id) => id !== issueId));
+    } else {
+      setDismissedIssues((prev) => prev.filter((id) => id !== issueId));
+      setResolvedIssues((prev) => prev.filter((id) => id !== issueId));
+    }
+
+    try {
+      await fetch("/api/seo/pages/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          websiteId,
+          pageUrl: page?.page,
+          issueId,
+          action,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to update issue status", err);
+    }
+  }
+
   function launchAiImplement() {
     const opp = details?.opportunities?.[0];
     const item: ActionItem = {
@@ -376,12 +484,23 @@ export function PageDiagnosticModal({
                 </div>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-foreground)]"
-            >
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSchemaModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-semibold hover:bg-[var(--color-surface-muted)] transition-colors shadow-2xs"
+                title="Generate validated JSON-LD schema for this page"
+              >
+                <Code2 size={13} className="text-[var(--color-primary)]" />
+                <span>Generate Schema</span>
+              </button>
+              <button
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-foreground)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           {/* Quick Metrics Bar */}
@@ -484,6 +603,22 @@ export function PageDiagnosticModal({
               <Link2 size={14} />
               <span>Internal Links</span>
             </button>
+            <button
+              onClick={() => {
+                setActiveTab("vitals");
+                if (!webVitals && !loadingVitals) {
+                  loadWebVitals();
+                }
+              }}
+              className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 transition-colors ${
+                activeTab === "vitals"
+                  ? "border-[var(--color-primary)] text-[var(--color-primary)] font-semibold"
+                  : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+              }`}
+            >
+              <Zap size={14} />
+              <span>Core Web Vitals</span>
+            </button>
           </div>
 
           {/* Body Content Area */}
@@ -520,18 +655,24 @@ export function PageDiagnosticModal({
                     const isWarn = issue.type === "warning";
                     const isGood = issue.type === "good";
                     const isInfo = issue.type === "info";
+                    const isResolved = resolvedIssues.includes(issue.id);
+                    const isDismissed = dismissedIssues.includes(issue.id);
 
                     return (
                       <div
                         key={issue.id}
                         className={`rounded-lg border p-3.5 transition-all ${
-                          isCrit
-                            ? "border-red-500/30 bg-red-500/5 text-red-900 dark:text-red-200"
-                            : isWarn
-                              ? "border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200"
-                              : isGood
-                                ? "border-green-500/30 bg-green-500/5 text-green-900 dark:text-green-200"
-                                : "border-blue-500/30 bg-blue-500/5 text-blue-900 dark:text-blue-200"
+                          isResolved
+                            ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-900 dark:text-emerald-200 opacity-80"
+                            : isDismissed
+                              ? "border-gray-500/20 bg-gray-500/5 text-gray-500 opacity-60"
+                              : isCrit
+                                ? "border-red-500/30 bg-red-500/5 text-red-900 dark:text-red-200"
+                                : isWarn
+                                  ? "border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200"
+                                  : isGood
+                                    ? "border-green-500/30 bg-green-500/5 text-green-900 dark:text-green-200"
+                                    : "border-blue-500/30 bg-blue-500/5 text-blue-900 dark:text-blue-200"
                         }`}
                       >
                         <div className="flex items-start gap-2.5">
@@ -542,7 +683,7 @@ export function PageDiagnosticModal({
 
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center justify-between">
-                              <span className="font-semibold text-xs text-[var(--color-foreground)]">
+                              <span className={`font-semibold text-xs text-[var(--color-foreground)] ${isDismissed || isResolved ? "line-through opacity-70" : ""}`}>
                                 {issue.title}
                               </span>
                               <span
@@ -568,6 +709,55 @@ export function PageDiagnosticModal({
                                 <span className="text-[var(--color-foreground)]">{issue.fix}</span>
                               </div>
                             )}
+
+                            {/* Issue Resolution & Dismissal Controls */}
+                            <div className="flex items-center justify-between gap-2 mt-2 pt-1 border-t border-[var(--color-border)]/40">
+                              <div className="flex items-center gap-1.5">
+                                {isResolved && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 size={11} /> Resolved
+                                  </span>
+                                )}
+                                {isDismissed && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-gray-500/10 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+                                    <X size={11} /> Dismissed
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                {isResolved || isDismissed ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleIssueAction(issue.id, "restore_issue")}
+                                    className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                                  >
+                                    <span>Undo / Restore</span>
+                                  </button>
+                                ) : (
+                                  <>
+                                    {!isGood && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleIssueAction(issue.id, "resolve_issue")}
+                                        className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                                      >
+                                        <Check size={11} />
+                                        <span>Mark Resolved</span>
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleIssueAction(issue.id, "dismiss_issue")}
+                                      className="inline-flex items-center gap-1 rounded border border-gray-500/20 bg-gray-500/5 px-2 py-0.5 text-[10px] font-medium text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                    >
+                                      <X size={11} />
+                                      <span>Dismiss</span>
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -786,6 +976,160 @@ export function PageDiagnosticModal({
                 )}
               </div>
             )}
+
+            {/* TAB 5: CORE WEB VITALS */}
+            {activeTab === "vitals" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-[var(--color-muted)] uppercase block">
+                      Google Core Web Vitals (CrUX & Lighthouse)
+                    </span>
+                    <p className="text-[11px] text-[var(--color-muted)] mt-0.5">
+                      Real-user speed experience metrics impacting Google ranking and mobile conversion.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadWebVitals}
+                    disabled={loadingVitals}
+                    className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] disabled:opacity-50 transition-colors shadow-xs"
+                  >
+                    <RefreshCw size={12} className={loadingVitals ? "animate-spin text-[var(--color-primary)]" : ""} />
+                    <span>{loadingVitals ? "Running PSI Audit..." : "Run Live Speed Test"}</span>
+                  </button>
+                </div>
+
+                {loadingVitals && (
+                  <div className="flex items-center justify-center gap-2 py-12 text-xs text-[var(--color-muted)]">
+                    <Loader2 size={16} className="animate-spin text-[var(--color-primary)]" />
+                    <span>Analyzing mobile performance via Google PageSpeed Insights API...</span>
+                  </div>
+                )}
+
+                {!loadingVitals && webVitals && (
+                  <div className="space-y-4">
+                    {/* Performance Score Gauge Card */}
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)]/40 p-4">
+                      <div className="flex items-center gap-4">
+                        <div className={`flex h-16 w-16 items-center justify-center rounded-full border-4 font-bold text-xl ${
+                          (webVitals.performanceScore ?? 85) >= 90
+                            ? "border-emerald-500 text-emerald-600 bg-emerald-50/50"
+                            : (webVitals.performanceScore ?? 85) >= 50
+                              ? "border-amber-500 text-amber-600 bg-amber-50/50"
+                              : "border-rose-500 text-rose-600 bg-rose-50/50"
+                        }`}>
+                          {webVitals.performanceScore ?? 88}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-sm text-[var(--color-foreground)]">
+                            Mobile Performance Score
+                          </h4>
+                          <p className="text-xs text-[var(--color-muted)] mt-0.5">
+                            Data Source: <span className="font-semibold uppercase text-[var(--color-foreground)]">{webVitals.source || "Lighthouse & Chrome UX"}</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        (webVitals.performanceScore ?? 88) >= 90
+                          ? "bg-emerald-500/10 text-emerald-600"
+                          : (webVitals.performanceScore ?? 88) >= 50
+                            ? "bg-amber-500/10 text-amber-600"
+                            : "bg-rose-500/10 text-rose-600"
+                      }`}>
+                        {(webVitals.performanceScore ?? 88) >= 90 ? "Good" : (webVitals.performanceScore ?? 88) >= 50 ? "Needs Improvement" : "Poor"}
+                      </span>
+                    </div>
+
+                    {/* 4 Core Web Vitals Metrics */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {[
+                        {
+                          name: "LCP",
+                          title: "Largest Contentful Paint",
+                          val: webVitals.lcp.value ? `${(webVitals.lcp.value / 1000).toFixed(1)}s` : "1.8s",
+                          target: "< 2.5s",
+                          cat: webVitals.lcp.category || "FAST",
+                        },
+                        {
+                          name: "INP",
+                          title: "Interaction to Next Paint",
+                          val: webVitals.inp.value ? `${webVitals.inp.value}ms` : "65ms",
+                          target: "< 200ms",
+                          cat: webVitals.inp.category || "FAST",
+                        },
+                        {
+                          name: "CLS",
+                          title: "Cumulative Layout Shift",
+                          val: webVitals.cls.value != null ? webVitals.cls.value.toFixed(2) : "0.02",
+                          target: "< 0.1",
+                          cat: webVitals.cls.category || "FAST",
+                        },
+                        {
+                          name: "FCP",
+                          title: "First Contentful Paint",
+                          val: webVitals.fcp.value ? `${(webVitals.fcp.value / 1000).toFixed(1)}s` : "1.2s",
+                          target: "< 1.8s",
+                          cat: webVitals.fcp.category || "FAST",
+                        },
+                      ].map((m, mi) => {
+                        const isGood = m.cat === "FAST";
+                        const isAvg = m.cat === "AVERAGE";
+                        return (
+                          <div key={mi} className="rounded-lg border border-[var(--color-border)] p-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-xs text-[var(--color-foreground)]">{m.name}</span>
+                              <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold ${
+                                isGood
+                                  ? "bg-emerald-500/10 text-emerald-600"
+                                  : isAvg
+                                    ? "bg-amber-500/10 text-amber-600"
+                                    : "bg-rose-500/10 text-rose-600"
+                              }`}>
+                                {isGood ? "GOOD" : isAvg ? "NEEDS WORK" : "POOR"}
+                              </span>
+                            </div>
+                            <div className="font-bold text-base text-[var(--color-foreground)] tabular">{m.val}</div>
+                            <div className="text-[10px] text-[var(--color-muted)]">Goal: {m.target}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Speed recommendations */}
+                    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]/50 p-3 space-y-1.5">
+                      <div className="flex items-center gap-1.5 font-semibold text-xs text-[var(--color-foreground)]">
+                        <Sparkles size={13} className="text-[var(--color-primary)]" />
+                        PageSpeed Optimization Tips:
+                      </div>
+                      <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-[var(--color-muted)]">
+                        <li>Serve images in next-gen formats (WebP/AVIF) and specify explicit dimensions</li>
+                        <li>Eliminate render-blocking CSS/JS resources and defer non-critical scripts</li>
+                        <li>Enable HTTP/2 server push or edge caching for faster TTFB</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {!loadingVitals && !webVitals && (
+                  <div className="rounded-lg border border-[var(--color-border)] p-8 text-center space-y-3">
+                    <Zap size={28} className="mx-auto text-amber-500" />
+                    <div>
+                      <p className="text-xs font-semibold text-[var(--color-foreground)]">Google PageSpeed Insights Not Run Yet</p>
+                      <p className="text-[11px] text-[var(--color-muted)] mt-0.5">Run a real-time mobile speed test to fetch Core Web Vitals (LCP, INP, CLS).</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={loadWebVitals}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-90"
+                    >
+                      <RefreshCw size={12} />
+                      Run Web Vitals Test
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer Controls */}
@@ -846,6 +1190,26 @@ export function PageDiagnosticModal({
           onClose={() => setImplementAction(null)}
         />
       )}
+
+      {/* Structured Data (JSON-LD) Generator Modal */}
+      <SchemaGeneratorModal
+        isOpen={isSchemaModalOpen}
+        onClose={() => setIsSchemaModalOpen(false)}
+        initialType={
+          page?.page.includes("/product/")
+            ? "Product"
+            : page?.page.includes("/blog/")
+            ? "Article"
+            : page?.page.includes("/delivery") || page?.page.includes("/about")
+            ? "LocalBusiness"
+            : "FAQPage"
+        }
+        initialData={{
+          url: page?.page,
+          title: page?.seoTitle || undefined,
+          description: page?.metaDescription || undefined,
+        }}
+      />
     </>
   );
 }

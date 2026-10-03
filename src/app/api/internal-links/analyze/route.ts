@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     websiteId?: string;
     suggestionId?: string;
-    status?: "approved" | "dismissed" | "applied";
+    status?: "approved" | "dismissed" | "applied" | "suggested";
     action?: "sync_all_approved";
   };
 

@@ -17,6 +17,8 @@ import {
   TrendingUp,
   ShieldAlert,
   Zap,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
 import type { MarketingStrategy } from "@/server/services/business-intelligence";
 
@@ -34,6 +36,7 @@ export function MarketingStrategySection({ strategy, websiteName }: MarketingStr
     "w1-1": true,
     "w1-2": true,
   });
+  const [dismissedTasks, setDismissedTasks] = useState<Record<string, boolean>>({});
 
   const totalTasks = strategy.roadmap30Day.reduce((sum, w) => sum + w.tasks.length, 0);
   const completedTasks = Object.values(checkedTasks).filter(Boolean).length;
@@ -41,6 +44,13 @@ export function MarketingStrategySection({ strategy, websiteName }: MarketingStr
 
   function toggleTask(id: string) {
     setCheckedTasks((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  }
+
+  function toggleDismissTask(id: string) {
+    setDismissedTasks((prev) => ({
       ...prev,
       [id]: !prev[id],
     }));
@@ -404,23 +414,57 @@ ${strategy.roadmap30Day
                   <div className="space-y-2">
                     {wk.tasks.map((t) => {
                       const isDone = Boolean(checkedTasks[t.id]);
+                      const isDismissed = Boolean(dismissedTasks[t.id]);
                       return (
-                        <button
+                        <div
                           key={t.id}
-                          onClick={() => toggleTask(t.id)}
-                          className={`w-full flex items-start gap-2.5 rounded-lg p-2 text-left text-xs transition-colors ${
+                          className={`w-full flex items-center justify-between gap-2.5 rounded-lg p-2 text-xs transition-colors ${
                             isDone
                               ? "bg-emerald-500/5 text-[var(--color-muted)] line-through"
-                              : "hover:bg-[var(--color-surface-muted)] text-[var(--color-foreground)]"
+                              : isDismissed
+                                ? "bg-gray-500/5 text-[var(--color-muted)] opacity-50"
+                                : "hover:bg-[var(--color-surface-muted)] text-[var(--color-foreground)]"
                           }`}
                         >
-                          {isDone ? (
-                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 mt-0.5" />
-                          ) : (
-                            <Circle className="h-4 w-4 shrink-0 text-[var(--color-muted)] mt-0.5" />
-                          )}
-                          <span className="leading-snug">{t.task}</span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleTask(t.id)}
+                            className="flex items-start gap-2.5 text-left flex-1 min-w-0"
+                          >
+                            {isDone ? (
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 mt-0.5" />
+                            ) : (
+                              <Circle className="h-4 w-4 shrink-0 text-[var(--color-muted)] mt-0.5" />
+                            )}
+                            <span className={`leading-snug ${isDismissed ? "line-through text-gray-400" : ""}`}>
+                              {t.task}
+                            </span>
+                          </button>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isDismissed ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleDismissTask(t.id)}
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                                title="Restore task"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                <span>Restore</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => toggleDismissTask(t.id)}
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-muted)] hover:text-red-500"
+                                title="Dismiss task"
+                              >
+                                <XCircle className="h-3 w-3" />
+                                <span>Dismiss</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>

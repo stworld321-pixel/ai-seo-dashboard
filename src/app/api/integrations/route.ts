@@ -92,6 +92,57 @@ export async function POST(request: Request) {
 
   const kind = json.kind || "CMS";
   const config = (json.config ?? {}) as Record<string, unknown>;
+
+  // Sanitize siteUrl if present
+  if (config.siteUrl && typeof config.siteUrl === "string") {
+    let clean = config.siteUrl.trim();
+    const doubleMatch = clean.match(/https?:\/\/[^\/]+\/(https?:\/\/.*)/i);
+    if (doubleMatch?.[1]) {
+      clean = doubleMatch[1];
+    }
+    config.siteUrl = clean.replace(/\/+$/, "");
+  }
+
+  // Live verification for WordPress CMS credentials before saving
+  if (kind === "CMS" && (json.provider === "wordpress_self_hosted" || json.provider === "wordpress")) {
+    const wpUsername = ((json.secrets?.username || config.username) as string | undefined)?.trim();
+    const wpPassword = ((json.secrets?.appPassword || config.appPassword) as string | undefined)?.trim();
+    const wpUrl = (config.siteUrl || json.secrets?.siteUrl || website.url) as string;
+
+    if (wpUsername && wpPassword) {
+      const { WordPressProvider } = await import("@/server/integrations/cms/wordpress");
+      const testClient = new WordPressProvider({
+        siteUrl: wpUrl,
+        username: wpUsername,
+        appPassword: wpPassword,
+        timeoutMs: 12000,
+      });
+
+      try {
+        await testClient.listCategories();
+      } catch (testErr) {
+        const msg = testErr instanceof Error ? testErr.message : String(testErr);
+        if (msg.includes("401") || msg.includes("incorrect_password")) {
+          return NextResponse.json(
+            {
+              error: {
+                message:
+                  "WordPress rejected the application password (401 Incorrect Password). Please verify the username and generate a fresh Application Password in WP Admin → Users → Profile.",
+              },
+            },
+            { status: 401 },
+          );
+        }
+      }
+    }
+
+    // Clean up conflicting opposite provider record so there's only one active WordPress CMS
+    const otherProvider = json.provider === "wordpress_self_hosted" ? "wordpress" : "wordpress_self_hosted";
+    await prisma.integration.deleteMany({
+      where: { websiteId: website.id, kind: "CMS", provider: otherProvider },
+    }).catch(() => {});
+  }
+
   let encryptedData: import("@/server/crypto").Encrypted | null = null;
 
   if (json.secrets && Object.keys(json.secrets).length > 0) {

@@ -162,13 +162,13 @@ export function IndexingPanel({
 
       {notice && (
         <div
-          className={`px-5 py-2.5 text-xs font-medium ${
+          className={`px-5 py-3 text-xs font-medium leading-relaxed ${
             notice.kind === "ok"
               ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
               : "bg-amber-500/10 text-amber-800 dark:text-amber-200"
           }`}
         >
-          {notice.text}
+          {renderNoticeWithLinks(notice.text)}
         </div>
       )}
 
@@ -250,3 +250,30 @@ function StatusPill({ row }: { row: Row }) {
     </span>
   );
 }
+
+function renderNoticeWithLinks(text: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      const cleanUrl = part.replace(/[.,;)]+$/, "");
+      const trailing = part.slice(cleanUrl.length);
+      return (
+        <span key={i}>
+          <a
+            href={cleanUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline font-semibold hover:opacity-80 inline-flex items-center gap-0.5 break-all text-blue-600 dark:text-blue-400"
+          >
+            {cleanUrl}
+            <ExternalLink className="h-3 w-3 inline shrink-0 ml-0.5" />
+          </a>
+          {trailing}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+

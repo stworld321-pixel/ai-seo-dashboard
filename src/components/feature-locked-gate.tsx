@@ -7,8 +7,8 @@ import { Card } from "@/components/card";
 export function FeatureLockedGate({
   featureName,
   featureDescription,
-  requiredPlan = "Pro ⭐",
-  price = "$79/mo",
+  requiredPlan = "AI CMO Pro ⭐",
+  price = "$208/mo",
   benefits,
   previewSnippet,
 }: {
@@ -29,7 +29,7 @@ export function FeatureLockedGate({
           {/* Header pill */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-xs font-bold border border-indigo-500/30">
-              <Lock size={13} /> {requiredPlan} Tier Feature
+              <Lock size={13} /> {requiredPlan} Feature
             </span>
             <span className="text-xs text-[var(--color-muted)] font-medium">
               Included in {requiredPlan} ({price}) and Enterprise
@@ -71,7 +71,7 @@ export function FeatureLockedGate({
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[var(--color-border)]">
             <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
               <ShieldCheck size={16} className="text-emerald-500" />
-              <span>Instant activation · No downtime · 25,000 Search &amp; AI Credits</span>
+              <span>Instant activation · Cancel anytime · Full AI CMO capabilities</span>
             </div>
 
             <Link

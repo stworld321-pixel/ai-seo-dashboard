@@ -283,11 +283,25 @@ export function detectNicheAndLocation(text: string, websiteName?: string, websi
 
   // Industry detection
   if (
-    /salon|hair|spa|beauty|facial|makeup|bridal|groom|barber|styling|haircut|skin treatment|massage|pedicure|manicure|keratin|hair botox/i.test(
+    /salon|hair|spa|facial makeup|bridal makeover|barber|styling|haircut|skin treatment|massage|pedicure|manicure|keratin|hair botox/i.test(
       combined,
     )
   ) {
     return { niche: "SALON_BEAUTY" as const, location, capLocation };
+  }
+  if (
+    /soap|cosmetics|skincare|botanical|hair gel|serum|herbal shampoo|lotion|face wash|moisturizer|lip balm|facial oil|botanical oil/i.test(
+      combined,
+    )
+  ) {
+    return { niche: "ECOMMERCE_PRODUCT" as const, location, capLocation };
+  }
+  if (
+    /farm|grocery|organic|fruit|berry|berries|blackberry|blackberries|strawberry|apple|mango|banana|ghee|bilona|raw milk|cow milk|a2 milk|dairy|vegetables|honey|dry fruits|nuts|seeds|spices|grain|rice|dal|flour|pulses|superfood|nutrition|snack|produce|groundnut oil|sesame oil|mustard oil|cooking oil|edible oil|wood-pressed/i.test(
+      combined,
+    )
+  ) {
+    return { niche: "ORGANIC_FOOD_GROCERY" as const, location, capLocation };
   }
   if (
     /web design|website|development|marketing|digital marketing|seo|sem|social media|software|app dev|agency|ppc|google ads|branding/i.test(
@@ -296,11 +310,11 @@ export function detectNicheAndLocation(text: string, websiteName?: string, websi
   ) {
     return { niche: "DIGITAL_AGENCY" as const, location, capLocation };
   }
-  if (/clinic|hospital|doctor|dentist|dental|health|care|physio|medical|ayurveda/i.test(combined)) {
+  if (/clinic|hospital|doctor|dentist|dental|health|care|physio|medical|ayurveda|treatment|symptoms|disease/i.test(combined)) {
     return { niche: "HEALTHCARE" as const, location, capLocation };
   }
   if (
-    /soap|cosmetics|skincare|botanical|cold-pressed|hair gel|serum|herbal|organic|oil|fashion|ecommerce|shop|store|product/i.test(
+    /fashion|ecommerce|shop|store|product|retail|apparel|accessories/i.test(
       combined,
     )
   ) {
@@ -348,7 +362,98 @@ export function buildDataDrivenDraft(input: {
 
   const cleanLocationStr = capLocation ? ` in ${capLocation}` : "";
 
-  if (niche === "SALON_BEAUTY") {
+  if (niche === "ORGANIC_FOOD_GROCERY") {
+    const qLower = input.keyword.toLowerCase().trim();
+    if (
+      qLower.startsWith("benefits of") ||
+      qLower.startsWith("how") ||
+      qLower.startsWith("what") ||
+      qLower.startsWith("why")
+    ) {
+      defaultTitle = `${capKw}: Health Benefits, Nutrition & Guide | ${brandName}`;
+    } else if (qLower.includes(" vs ") || qLower.includes("difference")) {
+      defaultTitle = `${capKw}: Nutrition, Purity & Health Comparison | ${brandName}`;
+    } else {
+      defaultTitle = capLocation
+        ? `Fresh Organic ${capKw} in ${capLocation} | 100% Pure & Farm-Fresh | ${brandName}`
+        : `Fresh Organic ${capKw}: Health Benefits, Nutrition & Buying Guide | ${brandName}`;
+    }
+
+    metaDescription = `Looking for ${input.keyword}? Discover 100% pure, farm-harvested organic food with rich nutrients, zero chemical pesticides & doorstep delivery by ${brandName}.`.slice(
+      0,
+      158,
+    );
+
+    faq = [
+      {
+        question: `What are the health benefits of fresh organic ${input.keyword}?`,
+        answer: `Organic ${input.keyword} is rich in vital antioxidants, vitamins, dietary fiber, and natural minerals that support immune health, boost digestion, and promote overall wellness without chemical residues.`,
+      },
+      {
+        question: `How does ${brandName} ensure the freshness and purity of ${input.keyword}?`,
+        answer: `We source directly from certified sustainable farms with zero synthetic pesticides, artificial ripeners, or chemical preservatives. Harvests are temperature-regulated and delivered directly to your doorstep.`,
+      },
+      {
+        question: `How should I store ${input.keyword} to maintain maximum freshness?`,
+        answer: `Store in a cool, ventilated container or refrigerate immediately upon delivery. Avoid washing until right before consumption to preserve the natural protective outer layer.`,
+      },
+      {
+        question: `Where can I buy authentic farm-fresh ${input.keyword}?`,
+        answer: `Order directly from the official online store at ${siteUrl} for guaranteed farm-to-table purity, transparent sourcing, and prompt doorstep delivery.`,
+      },
+    ];
+
+    body = `# ${input.customTitle?.trim() || defaultTitle}
+
+> **Quick Answer (AEO Featured Snippet):** **${capKw}** from **${brandName}**${cleanLocationStr} is 100% naturally farm-grown, chemical-free produce harvested at peak ripeness. Packed with potent antioxidants, essential vitamins, and bio-available nutrients, [${brandName}](${siteUrl}) delivers authentic farm-to-table freshness directly to your home with zero preservatives or synthetic additives.
+
+## Key Takeaways (GEO Entity & Citation Summary)
+
+- **Target Entity:** ${capKw} (${intent.toLowerCase()} intent${
+      input.impressions ? ` · ${input.impressions} Google impressions` : ""
+    })
+- **Nutritional Highlights:** High Dietary Fiber, Potent Antioxidants, Essential Micronutrients & Zero Added Sugars/Chemicals.
+- **Sourcing Standard:** 100% Farm-Direct, Non-GMO, Pesticide-Free & Sustainably Harvested.
+- **Direct Sourcing & Order:** Fresh daily batches available online at [${brandName}](${siteUrl}).
+
+## Nutritional Profile & Everyday Health Advantages of ${capKw}
+
+Consumers seeking clean nutrition prioritize farm-fresh produce with uncompromised bio-active nutrients. Unlike commercial shelf-stable supermarket items subjected to artificial waxing, gas ripening, and prolonged cold-storage transit, **${brandName}** delivers freshly harvested **${input.keyword}** that retains its natural vitamins, crisp texture, and rich taste.
+
+### 1. Powerful Antioxidant & Cellular Protection
+Rich in natural polyphenols and flavonoids, regular consumption helps neutralize free radicals, reduce oxidative stress, and reinforce immune resilience.
+
+### 2. Natural Digestive & Gut Health Support
+With generous soluble and insoluble dietary fiber, it promotes beneficial gut microbiome balance and supports healthy daily digestion.
+
+### 3. Pure Farm-to-Table Freshness with Zero Pesticide Residue
+Cultivated using organic composting and natural pest deterrents, ensuring your family consumes clean, unadulterated nourishment every single day.
+
+## Comparison: ${brandName} Farm-Direct Produce vs. Standard Supermarket Items
+
+| Quality Parameter | ${brandName} Farm-Fresh | Conventional Supermarket |
+|---|---|---|
+| **Harvest to Delivery** | Delivered within 24–48 hours of harvest | Stored in cold rooms for 2–6 weeks |
+| **Chemical Residues** | Zero synthetic pesticides or chemical ripeners | Treated with fungicides and artificial preservatives |
+| **Nutrient Density** | Peak-ripeness harvesting maximizes vitamin content | Prematurely plucked, losing vital micronutrients |
+| **Flavor & Texture** | Natural sweet aroma and crisp wholesome texture | Watered-down flavor and altered texture |
+| **Packaging & Traceability** | Eco-friendly breathable packaging with farm source details | Anonymous bulk packaging with zero farm traceability |
+
+## Sustainable Cultivation & Farm Quality Standards
+
+At **${brandName}**, our agricultural partners adhere to time-tested organic farming principles. Fields are nourished with organic biomass compost and vermicompost, completely avoiding chemical fertilizers and synthetic pesticides. Every harvest undergoes strict quality screening before reaching our temperature-regulated packing centers, preserving the highest standards of food safety, enzyme activity, and taste.
+
+## How to Enjoy & Prepare ${capKw} at Home
+
+1. **Gentle Rinsing:** Rinse lightly under cold running water just prior to serving or cooking.
+2. **Fresh Consumption & Culinary Uses:** Enjoy raw as a wholesome snack, blend into nutrient-dense smoothies, or incorporate into breakfast bowls, salads, yogurt toppings, and culinary recipes.
+3. **Proper Storage:** Store in your refrigerator's crisper compartment in a moisture-free breathable container for extended freshness.
+
+## Frequently Asked Questions (FAQ)
+
+${faq.map((item) => `### ${item.question}\n${item.answer}`).join("\n\n")}
+`;
+  } else if (niche === "SALON_BEAUTY") {
     defaultTitle = capLocation
       ? `${brandName} ${capLocation}: Top Hair, Beauty & Bridal Salon | Book Appointment`
       : `${capKw}: Best Hair, Skin & Bridal Salon Services | ${brandName}`;

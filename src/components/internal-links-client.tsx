@@ -107,7 +107,7 @@ export function InternalLinksClient({
     }
   }
 
-  async function handleStatus(id: string, status: "approved" | "dismissed" | "applied") {
+  async function handleStatus(id: string, status: "approved" | "dismissed" | "applied" | "suggested") {
     setBusyId(id);
     setBanner(null);
     try {
@@ -365,19 +365,17 @@ export function InternalLinksClient({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-64 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:outline-none"
               />
-              {hasCmsConnection && (
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-foreground)] focus:outline-none"
-                >
-                  <option value="all">All Statuses ({initialSuggestions.length})</option>
-                  <option value="suggested">Suggested (Pending)</option>
-                  <option value="approved">Approved</option>
-                  <option value="applied">Applied / Live</option>
-                  <option value="dismissed">Dismissed</option>
-                </select>
-              )}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-foreground)] focus:outline-none"
+              >
+                <option value="all">All Statuses ({initialSuggestions.length})</option>
+                <option value="suggested">Suggested (Pending)</option>
+                <option value="applied">Applied / Done</option>
+                <option value="approved">Approved</option>
+                <option value="dismissed">Dismissed</option>
+              </select>
             </div>
             <p className="text-xs text-[var(--color-muted)]">
               {hasCmsConnection
@@ -395,104 +393,123 @@ export function InternalLinksClient({
                   <th className="px-4 py-2.5">Suggested Anchor Text</th>
                   <th className="px-4 py-2.5">Strategic Reason</th>
                   <th className="px-4 py-2.5 text-right">Confidence</th>
-                  {hasCmsConnection && <th className="px-4 py-2.5">CMS Status</th>}
+                  <th className="px-4 py-2.5">Status</th>
                   <th className="px-4 py-2.5 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
                 {filteredSuggestions.length === 0 ? (
                   <tr>
-                    <td colSpan={hasCmsConnection ? 7 : 6} className="px-4 py-8 text-center text-xs text-[var(--color-muted)]">
+                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-[var(--color-muted)]">
                       No internal link opportunities match the selected filter. Click &ldquo;Re-analyze Internal Links&rdquo; above to generate new opportunities.
                     </td>
                   </tr>
                 ) : (
-                  filteredSuggestions.map((s) => (
-                    <tr key={s.id} className="hover:bg-[var(--color-surface-muted)]/40">
-                      <td className="px-4 py-3 font-mono text-xs">
-                        <a
-                          href={s.sourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[var(--color-info)] hover:underline"
-                        >
-                          {shortenUrl(s.sourceUrl)}
-                        </a>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        <a
-                          href={s.targetUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[var(--color-info)] hover:underline"
-                        >
-                          {shortenUrl(s.targetUrl)}
-                        </a>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="rounded bg-[var(--color-surface-muted)] px-2 py-0.5 font-medium text-xs">
-                            {s.anchor || "learn more"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="max-w-xs px-4 py-3 text-xs text-[var(--color-muted)]">{s.reason}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
-                        {Math.round(s.confidence * 100)}%
-                      </td>
-                      {hasCmsConnection && (
+                  filteredSuggestions.map((s) => {
+                    const isDone = s.status === "applied" || s.status === "approved" || s.status === "done";
+                    const isDismissed = s.status === "dismissed";
+
+                    return (
+                      <tr key={s.id} className={`hover:bg-[var(--color-surface-muted)]/40 ${isDismissed ? "opacity-60" : ""}`}>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          <a
+                            href={s.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[var(--color-info)] hover:underline"
+                          >
+                            {shortenUrl(s.sourceUrl)}
+                          </a>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          <a
+                            href={s.targetUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[var(--color-info)] hover:underline"
+                          >
+                            {shortenUrl(s.targetUrl)}
+                          </a>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded bg-[var(--color-surface-muted)] px-2 py-0.5 font-medium text-xs">
+                              {s.anchor || "learn more"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="max-w-xs px-4 py-3 text-xs text-[var(--color-muted)]">{s.reason}</td>
+                        <td className="px-4 py-3 text-right font-mono text-xs">
+                          {Math.round(s.confidence * 100)}%
+                        </td>
                         <td className="px-4 py-3">
                           <StatusBadge
-                            status={s.status}
-                            tone={
-                              s.status === "approved" || s.status === "applied"
-                                ? "success"
-                                : s.status === "dismissed"
-                                  ? "danger"
-                                  : "warning"
-                            }
+                            status={isDone ? "Applied / Done" : isDismissed ? "Dismissed" : "Suggested"}
+                            tone={isDone ? "success" : isDismissed ? "danger" : "warning"}
                           />
                         </td>
-                      )}
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* 1-Click Copy HTML Snippet for ANY website */}
-                          <button
-                            type="button"
-                            onClick={() => copyHtmlSnippet(s)}
-                            className="rounded bg-[var(--color-primary)] px-2.5 py-1 text-xs font-medium text-[var(--color-primary-fg)] hover:opacity-90 transition-opacity"
-                          >
-                            {copiedId === s.id ? "✓ Copied HTML" : "Copy HTML"}
-                          </button>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* 1-Click Copy HTML Snippet */}
+                            <button
+                              type="button"
+                              onClick={() => copyHtmlSnippet(s)}
+                              className="rounded bg-[var(--color-primary)] px-2 py-1 text-xs font-medium text-[var(--color-primary-fg)] hover:opacity-90 transition-opacity"
+                            >
+                              {copiedId === s.id ? "✓ Copied" : "Copy HTML"}
+                            </button>
 
-                          {/* CMS automated buttons only when CMS is connected */}
-                          {hasCmsConnection && (
-                            <>
-                              {s.status === "suggested" ? (
-                                <button
-                                  type="button"
-                                  disabled={busyId === s.id}
-                                  onClick={() => handleStatus(s.id, "approved")}
-                                  className="rounded bg-[var(--color-success-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-success)] hover:opacity-80 disabled:opacity-50"
-                                >
-                                  {busyId === s.id ? "Approving..." : "Approve CMS"}
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={busyId === s.id}
-                                  onClick={() => handleStatus(s.id, "applied")}
-                                  className="rounded border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 py-1 text-xs font-medium text-[var(--color-foreground)] hover:opacity-80 disabled:opacity-50"
-                                >
-                                  {busyId === s.id ? "Syncing..." : "Push Live"}
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {/* Direct Done & Dismiss Actions */}
+                            {!isDone ? (
+                              <button
+                                type="button"
+                                disabled={busyId === s.id}
+                                onClick={() => handleStatus(s.id, "applied")}
+                                className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
+                                title="Mark as Done / Applied"
+                              >
+                                {busyId === s.id ? "..." : "✓ Done"}
+                              </button>
+                            ) : null}
+
+                            {!isDismissed ? (
+                              <button
+                                type="button"
+                                disabled={busyId === s.id}
+                                onClick={() => handleStatus(s.id, "dismissed")}
+                                className="rounded border border-gray-500/20 bg-gray-500/5 px-2 py-1 text-xs font-medium text-gray-500 hover:text-red-500 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                                title="Dismiss link suggestion"
+                              >
+                                {busyId === s.id ? "..." : "✕ Dismiss"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={busyId === s.id}
+                                onClick={() => handleStatus(s.id, "suggested")}
+                                className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50 transition-colors"
+                                title="Restore link suggestion"
+                              >
+                                {busyId === s.id ? "..." : "↩ Restore"}
+                              </button>
+                            )}
+
+                            {isDone && !isDismissed && (
+                              <button
+                                type="button"
+                                disabled={busyId === s.id}
+                                onClick={() => handleStatus(s.id, "suggested")}
+                                className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50 transition-colors"
+                                title="Reopen link suggestion"
+                              >
+                                {busyId === s.id ? "..." : "↩ Reopen"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

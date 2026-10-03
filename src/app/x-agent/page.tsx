@@ -36,17 +36,17 @@ export default async function XInfluencerAgentPage(props: {
           dataThrough={window.to.toISOString().slice(0, 10)}
         />
         <FeatureLockedGate
-          featureName="Autonomous X (Twitter) Influencer Agent"
-          featureDescription="Identify trending industry conversations, key influencer threads, and brand mentions on X with automatic engagement drafting."
-          requiredPlan="Pro ⭐"
-          price="$79/mo"
+          featureName="X / Twitter Agent"
+          featureDescription="Generate 30+ to 60+ high-engagement posts, thread drafts, and contextual audience discussions per month to expand your brand authority on X."
+          requiredPlan={access.requiredPlan}
+          price={access.price}
           benefits={[
-            "Real-time X hashtag & influencer trend tracking",
-            "Context-aware high-engagement reply drafting",
-            "Direct posting via OAuth 2.0 PKCE or copy-paste",
-            "Brand citation analytics & impression tracking",
+            "Minimum 30 to 60 posts/month & viral thread drafts",
+            "Contextual engagement drafts & industry discussion replies",
+            "Audience resonance and niche hashtag optimization",
+            "1-Click live posting via connected X Developer API",
           ]}
-          previewSnippet="Detected 14 high-traffic threads on AI search indexing. Drafted 4 authoritative quotes with relevant website citation anchors."
+          previewSnippet="X Agent active: Generated 3 viral thread concepts & 5 contextual discussion drafts ready for approval."
         />
       </>
     );

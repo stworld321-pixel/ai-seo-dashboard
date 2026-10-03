@@ -111,6 +111,23 @@ export async function POST(request: Request) {
     (s) => s.url === normalizedUrl || s.url.replace(/\/+$/, "") === bareUrl,
   );
 
+  // Check website limits based on active plan
+  if (!existingSite && !user.isAdmin) {
+    const { checkWebsiteLimit } = await import("@/server/services/credits");
+    const limitCheck = await checkWebsiteLimit(user.id);
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "PLAN_LIMIT_EXCEEDED",
+            message: limitCheck.error || "Website plan limit reached. Please upgrade your plan.",
+          },
+        },
+        { status: 403 },
+      );
+    }
+  }
+
   const defaultGsc = input.gscProperty?.trim() || existingSite?.gscProperty || null;
   const defaultGa4 = input.ga4PropertyId?.trim() || existingSite?.ga4PropertyId || null;
 

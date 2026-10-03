@@ -32,6 +32,18 @@ export async function GET(request: Request) {
   }
 
   const oauthUrl = getGoogleOAuthUrl(website.id, redirectUri);
+
+  // If the browser navigates directly to this URL (e.g. from window.location.href or direct link),
+  // automatically redirect to Google's consent screen instead of displaying raw JSON
+  const isHtmlNavigation =
+    request.headers.get("sec-fetch-dest") === "document" ||
+    request.headers.get("sec-fetch-mode") === "navigate" ||
+    request.headers.get("accept")?.includes("text/html");
+
+  if (isHtmlNavigation || searchParams.get("redirect") === "true") {
+    return NextResponse.redirect(oauthUrl);
+  }
+
   return NextResponse.json({ url: oauthUrl, redirectUri });
 }
 

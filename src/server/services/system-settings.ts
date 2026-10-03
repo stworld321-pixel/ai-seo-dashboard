@@ -6,6 +6,7 @@ export type SystemSettingCategory =
   | "developer_connect"
   | "google_auth"
   | "whatsapp"
+  | "telegram"
   | "plans"
   | "payments_stripe"
   | "payments_razorpay";
@@ -32,6 +33,8 @@ const SECRET_KEYS = new Set([
   "google_client_secret",
   "whatsapp_auth_token",
   "whatsapp_meta_token",
+  "whatsapp_webhook_token",
+  "telegram_bot_token",
   "stripe_secret_key",
   "stripe_webhook_secret",
   "razorpay_key_secret",
@@ -87,42 +90,53 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, { value: string; category: 
   },
 
   // 4. WhatsApp Authentication & Messaging Setup
-  whatsapp_provider: { value: "twilio", category: "whatsapp" }, // "twilio" | "meta"
+  whatsapp_provider: { value: "twilio", category: "whatsapp" }, // "direct_wa_me" | "twilio" | "meta" | "custom_webhook"
   whatsapp_account_sid: { value: process.env.TWILIO_ACCOUNT_SID || "", category: "whatsapp" },
   whatsapp_auth_token: { value: process.env.TWILIO_AUTH_TOKEN || "", category: "whatsapp" },
   whatsapp_from_number: { value: process.env.TWILIO_WHATSAPP_NUMBER || "whatsapp:+14155238886", category: "whatsapp" },
   whatsapp_meta_phone_id: { value: "", category: "whatsapp" },
   whatsapp_meta_account_id: { value: "", category: "whatsapp" },
   whatsapp_meta_token: { value: "", category: "whatsapp" },
+  whatsapp_webhook_url: { value: "", category: "whatsapp" },
+  whatsapp_webhook_token: { value: "", category: "whatsapp" },
 
-  // 5. Subscription Plans
+  // 5. Telegram Bot & Notification Channel Setup
+  telegram_provider: { value: "bot_api", category: "telegram" }, // "direct_t_me" | "bot_api"
+  telegram_bot_token: { value: process.env.TELEGRAM_BOT_TOKEN || "", category: "telegram" },
+  telegram_chat_id: { value: process.env.TELEGRAM_CHAT_ID || "", category: "telegram" },
+  telegram_bot_username: { value: process.env.TELEGRAM_BOT_USERNAME || "", category: "telegram" },
+
+  // 6. Subscription Plans
   plans_config: {
     value: JSON.stringify([
       {
-        id: "basic",
-        name: "Basic",
-        priceMonthly: 29,
-        priceYearly: 290,
+        id: "free",
+        name: "Free Starter",
+        priceMonthly: 0,
+        priceYearly: 0,
         currency: "USD",
-        badge: "Starter",
+        badge: "Free Audit",
+        subtitle: "Essential SEO & Diagnostic Access",
+        tagline: "1 website · No credit card required.",
         features: [
-          "1 Website Included",
-          "1 User Account",
-          "500 Monitored Keywords",
-          "5K Search & AI Credits",
-          "50 Autonomous AI Actions/mo",
-          "Basic SEO Tools & Technical Audit",
-          "AI Visibility & Brand Tracking",
-          "Basic SEO Agent",
-          "2 AI Articles / month",
-          "1 Publishing Target (WordPress)",
+          "Full Website Analysis & HTML Metadata Extraction",
+          "Technical Health Score & Core Web Vitals",
+          "20 Monitored Search Keywords",
+          "1 AI Search Visibility Prompt",
+          "Google Search Console Integration",
+        ],
+        sections: [
+          {
+            category: "Website Analysis",
+            items: ["Full website crawl & metadata extraction", "Technical SEO health score"],
+          },
         ],
         limits: {
           websites: 1,
           users: 1,
-          keywords: 500,
-          credits: 5000,
-          aiActions: 50,
+          keywords: 20,
+          credits: 100,
+          aiActions: 10,
           seoTools: "Basic",
           aiVisibility: true,
           geoAgent: false,
@@ -130,7 +144,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, { value: string; category: 
           articleAgent: false,
           redditAgent: false,
           xAgent: false,
-          aiArticles: 2,
+          aiArticles: 0,
           publishing: 1,
           competitorMonitoring: "None",
           teamManagement: "None",
@@ -139,80 +153,167 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, { value: string; category: 
         isPopular: false,
       },
       {
-        id: "pro",
-        name: "Pro ⭐",
-        priceMonthly: 79,
-        priceYearly: 790,
+        id: "lite",
+        name: "AI CMO Lite",
+        priceMonthly: 108,
+        priceYearly: 1080,
         currency: "USD",
-        badge: "Most Popular",
+        badge: "Core Growth",
+        subtitle: "Limited AI CMO access",
+        tagline: "1 AI CMO per website · Cancel anytime.",
         features: [
-          "5 Websites Included",
-          "3 Team Users",
-          "2,500 Monitored Keywords",
-          "25K Search & AI Credits",
-          "300 Autonomous AI Actions/mo",
-          "Full SEO Tool Suite",
-          "AI Visibility & Search Grounding",
-          "GEO Agent Included",
-          "Full SEO Autonomous Agent",
-          "Article Agent & Automated Content",
-          "Reddit & X AI Opportunity Agents",
-          "20 AI Articles / month",
-          "Unlimited Publishing Integrations",
-          "Competitor Monitoring",
-          "Basic Team Management",
-          "Priority 24/7 Support",
+          "Full Website Analysis & Technical Documents",
+          "Product Info & Competitor Analysis Documents",
+          "Positioning + ICP & 30-Day Marketing Strategy",
+          "Monthly Content Strategy",
+          "SEO Agent (Technical & Content Opportunities)",
+          "GEO Agent (Track up to 15 AI Search Prompts)",
+          "Mentions & Citation Visibility Tracking",
+          "X / Twitter Agent (30+ Posts & Threads/mo)",
+        ],
+        sections: [
+          {
+            category: "Website Analysis",
+            items: [
+              "Full website analysis",
+              "Product info document",
+              "Design guide document",
+              "Competitor analysis document",
+            ],
+          },
+          {
+            category: "Strategies",
+            items: [
+              "Positioning + ICP messaging",
+              "30-day marketing strategy",
+              "Monthly content strategy",
+            ],
+          },
+          {
+            category: "SEO Agent",
+            items: [
+              "SEO recommendations",
+              "Technical SEO opportunities",
+              "Content opportunities",
+            ],
+          },
+          {
+            category: "GEO Agent",
+            items: [
+              "Track up to 15 AI search prompts",
+              "Mentions + citation visibility",
+              "Competitor AI visibility",
+              "AI visibility recommendations",
+            ],
+          },
+          {
+            category: "X / Twitter Agent",
+            items: [
+              "Minimum 30 posts/month",
+              "Posts + thread drafts",
+            ],
+          },
         ],
         limits: {
-          websites: 5,
-          users: 3,
-          keywords: 2500,
+          websites: 1,
+          users: 2,
+          keywords: 1500,
           credits: 25000,
-          aiActions: 300,
+          aiActions: 250,
           seoTools: "Full",
           aiVisibility: true,
           geoAgent: true,
           seoAgent: "Full",
-          articleAgent: true,
-          redditAgent: true,
+          articleAgent: false,
+          redditAgent: false,
           xAgent: true,
-          aiArticles: 20,
+          aiArticles: 5,
           publishing: -1,
-          competitorMonitoring: "Standard",
+          competitorMonitoring: "Included",
           teamManagement: "Basic",
           prioritySupport: true,
         },
-        isPopular: true,
+        isPopular: false,
       },
       {
-        id: "enterprise",
-        name: "Enterprise",
-        priceMonthly: 199,
-        priceYearly: 1990,
+        id: "pro",
+        name: "AI CMO Pro",
+        priceMonthly: 208,
+        priceYearly: 2080,
         currency: "USD",
-        badge: "Agency Scale",
+        badge: "Most Popular ⭐",
+        subtitle: "Full agent suite access",
+        tagline: "1 AI CMO per website · Cancel anytime.",
         features: [
-          "20 Websites Included",
-          "10 Team Users",
-          "10,000 Monitored Keywords",
-          "100K Search & AI Credits",
-          "1,000 Autonomous AI Actions/mo",
-          "Full SEO Tool Suite",
-          "AI Visibility & Multi-LLM Citation Graph",
-          "GEO Agent Included",
-          "Full SEO Autonomous Agent",
-          "Article Agent & Automated Content",
-          "Reddit & X AI Opportunity Agents",
-          "50 AI Articles / month",
-          "Unlimited Publishing Integrations",
-          "Advanced Competitor Monitoring",
-          "Advanced Team Management & RBAC",
-          "Priority Dedicated SLA Support",
+          "Everything in Lite included",
+          "Reddit Agent (High-intent monitoring & replies)",
+          "AI Content Writer (30+ Strategy articles/mo)",
+          "X / Twitter Agent (60+ Posts & Threads/mo)",
+          "Full SEO + GEO + Content Autonomous Suite",
+          "Unlimited CMS & Publishing Target Automations",
+          "Priority 24/7 Dedicated Support",
+        ],
+        sections: [
+          {
+            category: "Website Analysis",
+            items: [
+              "Full website analysis",
+              "Product info document",
+              "Design guide document",
+              "Competitor analysis document",
+            ],
+          },
+          {
+            category: "Strategies",
+            items: [
+              "Positioning + ICP messaging",
+              "30-day marketing strategy",
+              "Monthly content strategy",
+            ],
+          },
+          {
+            category: "SEO Agent",
+            items: [
+              "SEO recommendations",
+              "Technical SEO opportunities",
+              "Content opportunities",
+            ],
+          },
+          {
+            category: "GEO Agent",
+            items: [
+              "Track up to 100 AI search prompts",
+              "Mentions + citation visibility",
+              "Competitor AI visibility",
+              "AI visibility recommendations",
+            ],
+          },
+          {
+            category: "X / Twitter Agent",
+            items: [
+              "Minimum 60 posts/month",
+              "Posts + thread drafts",
+            ],
+          },
+          {
+            category: "Reddit Agent",
+            items: [
+              "High-intent monitoring",
+              "Contextual reply drafts",
+            ],
+          },
+          {
+            category: "AI Content Writer Agent",
+            items: [
+              "Minimum 30 articles/month",
+              "Strategy-led article drafts",
+            ],
+          },
         ],
         limits: {
-          websites: 20,
-          users: 10,
-          keywords: 10000,
+          websites: 3,
+          users: 5,
+          keywords: 5000,
           credits: 100000,
           aiActions: 1000,
           seoTools: "Full",
@@ -222,13 +323,13 @@ export const DEFAULT_SYSTEM_SETTINGS: Record<string, { value: string; category: 
           articleAgent: true,
           redditAgent: true,
           xAgent: true,
-          aiArticles: 50,
+          aiArticles: 30,
           publishing: -1,
           competitorMonitoring: "Advanced",
           teamManagement: "Advanced",
           prioritySupport: true,
         },
-        isPopular: false,
+        isPopular: true,
       },
     ]),
     category: "plans",
@@ -360,6 +461,7 @@ export async function getSystemSettingValue(key: string): Promise<string> {
  */
 export function shouldKeepStoredSecret(key: string, value: string): boolean {
   if (!SECRET_KEYS.has(key)) return false;
+  if (value === "__RESET__" || value === "__CLEAR__") return false;
   return value.trim() === "" || value.includes("••••••••");
 }
 
@@ -384,17 +486,21 @@ export async function updateSystemSettings(
     let storedValue = value.trim();
 
     // Encrypt secrets before writing to DB
-    if (SECRET_KEYS.has(key) && storedValue) {
-      try {
-        const encrypted = encrypt(storedValue);
-        const packedBuf = Buffer.from(encrypted.packed || Buffer.concat([
-          Buffer.from(encrypted.iv),
-          Buffer.from(encrypted.tag),
-          Buffer.from(encrypted.cipher),
-        ]));
-        storedValue = `ENC:${packedBuf.toString("hex")}`;
-      } catch (err) {
-        console.warn(`[SystemSettings] Failed to encrypt secret for ${key}:`, err);
+    if (SECRET_KEYS.has(key)) {
+      if (storedValue === "__RESET__" || storedValue === "__CLEAR__") {
+        storedValue = "";
+      } else if (storedValue) {
+        try {
+          const encrypted = encrypt(storedValue);
+          const packedBuf = Buffer.from(encrypted.packed || Buffer.concat([
+            Buffer.from(encrypted.iv),
+            Buffer.from(encrypted.tag),
+            Buffer.from(encrypted.cipher),
+          ]));
+          storedValue = `ENC:${packedBuf.toString("hex")}`;
+        } catch (err) {
+          console.warn(`[SystemSettings] Failed to encrypt secret for ${key}:`, err);
+        }
       }
     }
 
@@ -415,4 +521,27 @@ export async function updateSystemSettings(
   }
 
   return { success: true, updatedCount: count };
+}
+
+/**
+ * Reset all WhatsApp configuration settings to empty defaults.
+ */
+export async function resetWhatsAppSettings(): Promise<void> {
+  const defaults = {
+    whatsapp_provider: "twilio",
+    whatsapp_account_sid: "",
+    whatsapp_auth_token: "",
+    whatsapp_from_number: "whatsapp:+14155238886",
+    whatsapp_meta_phone_id: "",
+    whatsapp_meta_account_id: "",
+    whatsapp_meta_token: "",
+  };
+
+  for (const [key, value] of Object.entries(defaults)) {
+    await prisma.systemSetting.upsert({
+      where: { key },
+      create: { key, value, category: "whatsapp" },
+      update: { value },
+    });
+  }
 }

@@ -72,19 +72,19 @@ export default async function IntegrationsPage(props: {
       <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center border-b border-[var(--color-border)] pb-6">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#111827] dark:text-[#F9FAFB]">
-              Integrations
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--color-foreground)]">
+              Integrations Hub
             </h1>
-            <p className="mt-1 text-xs text-[#6B7280] dark:text-[var(--color-muted)]">
+            <p className="mt-1 text-xs text-[var(--color-muted)]">
               Manage your connected publishing platforms, analytics tools, and AI messaging channels for{" "}
-              <span className="font-semibold text-[#111827] dark:text-neutral-200">{website.name}</span> ({website.url}).
+              <span className="font-semibold text-[var(--color-foreground)]">{website.name}</span> ({website.url}).
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Link
               href={`/?website=${encodeURIComponent(website.id)}`}
-              className="rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] dark:border-[var(--color-border)] dark:bg-[var(--color-surface)] dark:text-neutral-200 transition-colors shadow-2xs"
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-2 text-xs font-semibold text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)] transition-colors shadow-2xs"
             >
               ← Back to Dashboard
             </Link>

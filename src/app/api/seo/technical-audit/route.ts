@@ -142,6 +142,66 @@ export async function POST(request: Request) {
         }),
       );
     }
+
+    // Also include top ranking Search Console URLs that haven't been crawled yet
+    const gscPages = await prisma.gscPageDaily.findMany({
+      where: { websiteId: website.id },
+      distinct: ["page"],
+      select: { page: true },
+      take: 40,
+    });
+    for (const gp of gscPages) {
+      if (!crawledUrls.has(gp.page) && !uncrawledDbPages.some((u) => u.url === gp.page)) {
+        try {
+          const res = await fetchUrlResilient(gp.page, 6000);
+          if (res.status >= 200 && res.status < 400 && res.body) {
+            const parsed = parseHtmlPage(gp.page, res.body, domain);
+            await prisma.pageRecord.upsert({
+              where: { websiteId_url: { websiteId: website.id, url: gp.page } },
+              create: {
+                websiteId: website.id,
+                url: gp.page,
+                title: parsed.title,
+                h1: parsed.h1,
+                metaDescription: parsed.metaDescription,
+                canonical: parsed.canonical,
+                wordCount: parsed.wordCount,
+                contentScore: parsed.contentScore,
+                contentScoreDetail: {
+                  focusKeyword: parsed.focusKeyword,
+                  internalLinks: parsed.internalLinks,
+                  externalLinks: parsed.externalLinks,
+                  hasSchema: parsed.hasSchema,
+                  schemaTypes: parsed.schemaTypes,
+                },
+                lastCrawledAt: now,
+                status: !parsed.metaDescription || parsed.wordCount < 300 ? "OPTIMIZE" : "HEALTHY",
+              },
+              update: {
+                title: parsed.title,
+                h1: parsed.h1,
+                metaDescription: parsed.metaDescription,
+                canonical: parsed.canonical,
+                wordCount: parsed.wordCount,
+                contentScore: parsed.contentScore,
+                contentScoreDetail: {
+                  focusKeyword: parsed.focusKeyword,
+                  internalLinks: parsed.internalLinks,
+                  externalLinks: parsed.externalLinks,
+                  hasSchema: parsed.hasSchema,
+                  schemaTypes: parsed.schemaTypes,
+                },
+                lastCrawledAt: now,
+                status: !parsed.metaDescription || parsed.wordCount < 300 ? "OPTIMIZE" : "HEALTHY",
+              },
+            });
+            crawledUrls.add(gp.page);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
   } catch {
     // Non-fatal crawl fallback
   }

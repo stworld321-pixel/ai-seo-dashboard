@@ -10,10 +10,12 @@ export const dynamic = "force-dynamic";
 function deriveStatus(
   page: { impressions: number; clicks: number; position: number },
   hasOpportunityOrMissingMeta: boolean,
+  isCrawled: boolean,
 ): { label: string; tone: "neutral" | "success" | "warning" | "danger" } {
   if (hasOpportunityOrMissingMeta) return { label: "Optimize", tone: "warning" };
   if (page.position <= 10 && page.clicks > 0) return { label: "Healthy", tone: "success" };
   if (page.position <= 10 && page.clicks === 0) return { label: "Investigate", tone: "warning" };
+  if (!isCrawled) return { label: "Pending Audit", tone: "neutral" };
   if (page.position <= 20) return { label: "Expand", tone: "neutral" };
   return { label: "Supporting", tone: "neutral" };
 }
@@ -44,18 +46,42 @@ export default async function PagesPage(props: PageProps<"/seo/pages">) {
     }),
   ]);
 
-  const recordByUrl = new Map(
-    pageRecords.map((r) => [r.url.replace(/\/+$/, ""), r]),
-  );
+  // Robust URL normalization map supporting query params, trailing slashes, and decoded paths
+  const recordByUrl = new Map<string, typeof pageRecords[0]>();
+  for (const r of pageRecords) {
+    const clean = r.url.trim().replace(/\/+$/, "");
+    recordByUrl.set(clean, r);
+    try {
+      const parsed = new URL(r.url);
+      recordByUrl.set(parsed.pathname.replace(/\/+$/, ""), r);
+      recordByUrl.set(decodeURIComponent(parsed.pathname).replace(/\/+$/, ""), r);
+    } catch {}
+  }
+
+  function findRecord(pageUrl: string) {
+    const clean = pageUrl.trim().replace(/\/+$/, "");
+    if (recordByUrl.has(clean)) return recordByUrl.get(clean);
+    try {
+      const parsed = new URL(pageUrl);
+      const pathOnly = parsed.pathname.replace(/\/+$/, "");
+      if (recordByUrl.has(pathOnly)) return recordByUrl.get(pathOnly);
+      const decodedPath = decodeURIComponent(parsed.pathname).replace(/\/+$/, "");
+      if (recordByUrl.has(decodedPath)) return recordByUrl.get(decodedPath);
+    } catch {}
+    return undefined;
+  }
+
   const oppUrls = new Set(opps.map((o) => o.targetUrl).filter(Boolean) as string[]);
 
   const rows = pages.map((p) => {
-    const rec = recordByUrl.get(p.page.replace(/\/+$/, ""));
-    const isMissingMeta = !rec?.metaDescription || rec.metaDescription.trim().length === 0;
+    const rec = findRecord(p.page);
+    const isCrawled = Boolean(rec && rec.lastCrawledAt);
+    const isMissingMeta = isCrawled && (!rec?.metaDescription || rec.metaDescription.trim().length === 0);
     const hasOpp = oppUrls.has(p.page);
 
     return {
       ...p,
+      isCrawled,
       seoTitle: rec?.title ?? null,
       metaDescription: rec?.metaDescription ?? null,
       h1: rec?.h1 ?? null,
@@ -65,7 +91,7 @@ export default async function PagesPage(props: PageProps<"/seo/pages">) {
       contentScoreDetail: rec?.contentScoreDetail ?? null,
       lastCrawledAt: rec?.lastCrawledAt ?? null,
       lastModifiedAt: rec?.lastModifiedAt ?? null,
-      status: deriveStatus(p, hasOpp || isMissingMeta),
+      status: deriveStatus(p, hasOpp || isMissingMeta, isCrawled),
     };
   });
 

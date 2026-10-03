@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -20,6 +20,11 @@ import {
   FileText,
   CheckCircle2,
   ChevronRight,
+  Check,
+  X,
+  XCircle,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardHeader } from "@/components/card";
 import { DataTable } from "@/components/data-table";
@@ -88,9 +93,10 @@ export function KeywordsClientView({
   initialKeywords: KeywordRow[];
 }) {
   const [keywords, setKeywords] = useState<KeywordRow[]>(initialKeywords);
-  const [activeTab, setActiveTab] = useState<"opportunities" | "clusters" | "by_page" | "questions" | "geo_prompts" | "content_ideas">("opportunities");
+  const [activeTab, setActiveTab] = useState<"opportunities" | "clusters" | "by_page" | "questions" | "geo_prompts" | "content_ideas" | "cannibalization">("opportunities");
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "custom" | "gsc">("all");
+  const [statusFilter, setStatusFilter] = useState<"active" | "done" | "dismissed" | "all">("active");
   const [bandFilter, setBandFilter] = useState<string | null>(null);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -101,6 +107,56 @@ export function KeywordsClientView({
   const [isRunningFullResearch, setIsRunningFullResearch] = useState(false);
   const [researchSuccessMsg, setResearchSuccessMsg] = useState<string | null>(null);
 
+  // Position delta tracking (Δpos)
+  const [positionDeltas, setPositionDeltas] = useState<Record<string, { currentPosition: number; previousPosition: number | null; delta: number | null }>>({});
+
+  // Cannibalization analysis
+  const [cannibalizationData, setCannibalizationData] = useState<Array<{
+    query: string;
+    pages: Array<{ url: string; impressions: number; clicks: number; position: number; share: number }>;
+    totalImpressions: number;
+  }>>([]);
+  const [loadingCannib, setLoadingCannib] = useState(false);
+
+  // Load position deltas on mount
+  useEffect(() => {
+    fetch(`/api/seo/keywords/position-delta?websiteId=${websiteId}`)
+      .then((res) => res.json())
+      .then((json) => { if (json.data) setPositionDeltas(json.data); })
+      .catch(() => {});
+  }, [websiteId]);
+
+  const isKwDone = (k: KeywordRow) => (k.tags || []).includes("status:done");
+  const isKwDismissed = (k: KeywordRow) => (k.tags || []).includes("status:dismissed");
+
+  async function handleKeywordStatus(row: KeywordRow, newStatus: "active" | "done" | "dismissed") {
+    try {
+      const res = await fetch("/api/seo/keywords/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          websiteId,
+          keywordId: row.id,
+          query: row.query,
+          status: newStatus,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.data) {
+        const updatedTags = (json.data.tags as string[]) || [];
+        setKeywords((prev) =>
+          prev.map((k) =>
+            k.query.toLowerCase() === row.query.toLowerCase()
+              ? { ...k, tags: updatedTags }
+              : k,
+          ),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to update keyword status", err);
+    }
+  }
+
   // Derived filtered rows
   const visible = keywords.filter((k) => {
     if (searchTerm && !k.query.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -109,11 +165,22 @@ export function KeywordsClientView({
     if (sourceFilter === "custom" && !k.isCustom) return false;
     if (sourceFilter === "gsc" && k.isCustom) return false;
     if (bandFilter && k.band !== bandFilter) return false;
+
+    const done = isKwDone(k);
+    const dismissed = isKwDismissed(k);
+
+    if (statusFilter === "active" && (done || dismissed)) return false;
+    if (statusFilter === "done" && !done) return false;
+    if (statusFilter === "dismissed" && !dismissed) return false;
+
     return true;
   });
 
   const counts = {
     total: keywords.length,
+    active: keywords.filter((k) => !isKwDone(k) && !isKwDismissed(k)).length,
+    done: keywords.filter((k) => isKwDone(k)).length,
+    dismissed: keywords.filter((k) => isKwDismissed(k)).length,
     custom: keywords.filter((k) => k.isCustom).length,
     gsc: keywords.filter((k) => !k.isCustom).length,
     top3: keywords.filter((k) => k.band === "top3").length,
@@ -170,6 +237,20 @@ export function KeywordsClientView({
       // ignore
     }
   }
+
+  async function loadCannibalization() {
+    setLoadingCannib(true);
+    try {
+      const res = await fetch(`/api/seo/keywords/cannibalization?websiteId=${websiteId}`);
+      if (res.ok) {
+        const json = await res.json();
+        setCannibalizationData(json.data ?? []);
+      }
+    } catch { /* ignore */ }
+    finally { setLoadingCannib(false); }
+  }
+
+  const cannibalizationCount = cannibalizationData.length;
 
   async function handleRunFullResearch() {
     setIsRunningFullResearch(true);
@@ -303,6 +384,7 @@ export function KeywordsClientView({
             { id: "questions", label: "Questions & PAA", icon: HelpCircle, count: questionKeywords.length },
             { id: "geo_prompts", label: "AI Prompts (GEO)", icon: Bot, count: 8 },
             { id: "content_ideas", label: "Content Ideas", icon: Lightbulb, count: contentIdeaKeywords.length },
+            { id: "cannibalization", label: "Cannibalization", icon: AlertTriangle, count: cannibalizationCount },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -408,6 +490,50 @@ export function KeywordsClientView({
                 }`}
               >
                 Search Console ({counts.gsc})
+              </button>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5">
+              <button
+                onClick={() => setStatusFilter("active")}
+                className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                  statusFilter === "active"
+                    ? "bg-[var(--color-primary)] text-[var(--color-primary-fg)] font-semibold"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                }`}
+              >
+                Active ({counts.active})
+              </button>
+              <button
+                onClick={() => setStatusFilter("done")}
+                className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                  statusFilter === "done"
+                    ? "bg-emerald-600 text-white font-semibold"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                }`}
+              >
+                Done ({counts.done})
+              </button>
+              <button
+                onClick={() => setStatusFilter("dismissed")}
+                className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                  statusFilter === "dismissed"
+                    ? "bg-gray-600 text-white font-semibold"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                }`}
+              >
+                Dismissed ({counts.dismissed})
+              </button>
+              <button
+                onClick={() => setStatusFilter("all")}
+                className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                  statusFilter === "all"
+                    ? "bg-[var(--color-surface-muted)] text-[var(--color-foreground)] font-semibold"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                }`}
+              >
+                All
               </button>
             </div>
 
@@ -534,6 +660,25 @@ export function KeywordsClientView({
                 ),
               },
               {
+                key: "delta",
+                header: "Δ Position",
+                align: "center",
+                render: (r) => {
+                  const d = positionDeltas[r.query];
+                  if (!d || d.delta == null) return <span className="text-[10px] text-[var(--color-muted)] italic">—</span>;
+                  const improved = d.delta > 0;
+                  const declined = d.delta < 0;
+                  return (
+                    <span className={`inline-flex items-center gap-0.5 font-semibold text-xs tabular ${
+                      improved ? "text-[var(--color-success)]" : declined ? "text-[var(--color-danger)]" : "text-[var(--color-muted)]"
+                    }`}>
+                      {improved ? "↑" : declined ? "↓" : "→"}
+                      {Math.abs(d.delta)}
+                    </span>
+                  );
+                },
+              },
+              {
                 key: "i",
                 header: "Volume / GSC",
                 align: "right",
@@ -543,37 +688,97 @@ export function KeywordsClientView({
                 key: "actions",
                 header: "Actions",
                 align: "right",
-                render: (r) => (
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      onClick={() => setSerpModalKeyword(r)}
-                      className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)]"
-                      title="View live Google SERP competitor data & People Also Ask"
-                    >
-                      <Search size={11} className="text-[var(--color-primary)]" />
-                      SERP Data
-                    </button>
+                render: (r) => {
+                  const done = isKwDone(r);
+                  const dismissed = isKwDismissed(r);
 
-                    <a
-                      href={`/content/generator?keyword=${encodeURIComponent(r.query)}`}
-                      className="inline-flex items-center gap-1 rounded border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-2 py-1 text-[11px] font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/20"
-                      title="Generate AI article targeting this keyword"
-                    >
-                      <Sparkles size={11} />
-                      Write
-                    </a>
+                  return (
+                    <div className="flex items-center justify-end gap-1">
+                      {done && (
+                        <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 size={11} /> Done
+                        </span>
+                      )}
+                      {dismissed && (
+                        <span className="inline-flex items-center gap-1 rounded bg-gray-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                          <X size={11} /> Dismissed
+                        </span>
+                      )}
 
-                    {r.isCustom && (
                       <button
-                        onClick={() => handleDeleteKeyword(r.id)}
-                        className="rounded p-1 text-[var(--color-muted)] hover:text-[var(--color-danger)]"
-                        title="Untrack keyword"
+                        onClick={() => setSerpModalKeyword(r)}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-foreground)] hover:bg-[var(--color-surface-muted)]"
+                        title="View live Google SERP competitor data & People Also Ask"
                       >
-                        <Trash2 size={12} />
+                        <Search size={11} className="text-[var(--color-primary)]" />
+                        SERP Data
                       </button>
-                    )}
-                  </div>
-                ),
+
+                      <a
+                        href={`/content/generator?keyword=${encodeURIComponent(r.query)}`}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-2 py-1 text-[11px] font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/20"
+                        title="Generate AI article targeting this keyword"
+                      >
+                        <Sparkles size={11} />
+                        Write
+                      </a>
+
+                      {!done ? (
+                        <button
+                          type="button"
+                          onClick={() => handleKeywordStatus(r, "done")}
+                          className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                          title="Mark keyword as Done / Content Published"
+                        >
+                          <Check size={11} />
+                          Done
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleKeywordStatus(r, "active")}
+                          className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                          title="Reopen keyword"
+                        >
+                          <RotateCcw size={11} />
+                          Reopen
+                        </button>
+                      )}
+
+                      {!dismissed ? (
+                        <button
+                          type="button"
+                          onClick={() => handleKeywordStatus(r, "dismissed")}
+                          className="inline-flex items-center gap-1 rounded border border-gray-500/20 bg-gray-500/5 px-2 py-1 text-[11px] font-medium text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                          title="Dismiss keyword"
+                        >
+                          <X size={11} />
+                          Dismiss
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleKeywordStatus(r, "active")}
+                          className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+                          title="Restore keyword"
+                        >
+                          <RotateCcw size={11} />
+                          Restore
+                        </button>
+                      )}
+
+                      {r.isCustom && (
+                        <button
+                          onClick={() => handleDeleteKeyword(r.id)}
+                          className="rounded p-1 text-[var(--color-muted)] hover:text-[var(--color-danger)]"
+                          title="Untrack keyword"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                },
               },
             ]}
           />
@@ -832,6 +1037,142 @@ export function KeywordsClientView({
             ]}
           />
         </Card>
+      )}
+
+      {/* TAB 7: CANNIBALIZATION CONFLICTS */}
+      {activeTab === "cannibalization" && (
+        <div className="space-y-4">
+          {/* Warning banner */}
+          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 text-xs text-amber-900">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-semibold text-sm">
+                <AlertTriangle size={16} className="text-amber-600" />
+                Keyword Cannibalization Conflicts
+              </div>
+              <button
+                onClick={loadCannibalization}
+                disabled={loadingCannib}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 transition-colors shadow-xs"
+              >
+                <RefreshCw size={13} className={loadingCannib ? "animate-spin" : ""} />
+                {loadingCannib ? "Analyzing..." : "Analyze Cannibalization"}
+              </button>
+            </div>
+            <p className="mt-1 text-amber-700">
+              These queries are being served by multiple pages on your site, splitting impressions and CTR. Consolidate or differentiate these pages to improve rankings.
+            </p>
+          </div>
+
+          {loadingCannib && (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--color-muted)]">
+              <Loader2 size={18} className="animate-spin" />
+              Analyzing keyword cannibalization across query + page impressions...
+            </div>
+          )}
+
+          {!loadingCannib && cannibalizationData.length > 0 && (
+            <div className="space-y-4">
+              {cannibalizationData.map((conflict, idx) => (
+                <Card key={idx}>
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                          Conflict #{idx + 1}
+                        </span>
+                        <span className="font-semibold text-sm text-[var(--color-foreground)]">
+                          &ldquo;{conflict.query}&rdquo;
+                        </span>
+                      </div>
+                      <span className="text-xs text-[var(--color-muted)]">
+                        {conflict.totalImpressions.toLocaleString()} total impressions split across {conflict.pages.length} pages
+                      </span>
+                    </div>
+
+                    {/* Impression Share Bar */}
+                    <div className="flex h-6 w-full overflow-hidden rounded-full bg-[var(--color-surface-muted)]">
+                      {conflict.pages.map((p, pi) => {
+                        const colors = ["bg-blue-500", "bg-amber-500", "bg-rose-400", "bg-purple-400", "bg-emerald-400"];
+                        return (
+                          <div
+                            key={pi}
+                            className={`${colors[pi % colors.length]} flex items-center justify-center text-[9px] font-bold text-white transition-all`}
+                            style={{ width: `${Math.max(p.share * 100, 5)}%` }}
+                            title={`${p.url}: ${Math.round(p.share * 100)}%`}
+                          >
+                            {Math.round(p.share * 100)}%
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pages Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-[var(--color-border)] text-[var(--color-muted)]">
+                            <th className="pb-2 text-left font-medium">Page URL</th>
+                            <th className="pb-2 text-right font-medium">Impressions</th>
+                            <th className="pb-2 text-right font-medium">Clicks</th>
+                            <th className="pb-2 text-right font-medium">Position</th>
+                            <th className="pb-2 text-right font-medium">Share</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {conflict.pages.map((p, pi) => (
+                            <tr key={pi} className={`border-b border-[var(--color-border)]/50 ${pi === 0 ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}>
+                              <td className="py-2 pr-4">
+                                <div className="flex items-center gap-1.5">
+                                  {pi === 0 && (
+                                    <span className="rounded bg-blue-500/10 px-1.5 py-0.2 text-[9px] font-bold text-blue-600">
+                                      PRIMARY
+                                    </span>
+                                  )}
+                                  <a href={p.url} target="_blank" rel="noreferrer" className="text-[var(--color-info)] hover:underline truncate max-w-xs">
+                                    {shortenUrl(p.url)}
+                                  </a>
+                                </div>
+                              </td>
+                              <td className="py-2 text-right tabular">{p.impressions.toLocaleString()}</td>
+                              <td className="py-2 text-right tabular">{p.clicks.toLocaleString()}</td>
+                              <td className="py-2 text-right">
+                                <span className={`font-semibold tabular ${p.position <= 10 ? "text-[var(--color-success)]" : "text-[var(--color-warning)]"}`}>
+                                  #{Math.round(p.position * 10) / 10}
+                                </span>
+                              </td>
+                              <td className="py-2 text-right">
+                                <span className={`font-bold ${pi === 0 ? "text-blue-600" : "text-amber-600"}`}>
+                                  {Math.round(p.share * 100)}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Recommendations */}
+                    <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]/50 p-3">
+                      <Sparkles size={14} className="shrink-0 text-[var(--color-primary)]" />
+                      <div className="text-xs text-[var(--color-muted)]">
+                        <strong className="text-[var(--color-foreground)]">Recommendation:</strong>{" "}
+                        Consolidate these pages into one authoritative piece targeting &ldquo;{conflict.query}&rdquo;, or differentiate them by user intent (informational vs transactional). Set canonicals and redirect the weaker page.
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {!loadingCannib && cannibalizationData.length === 0 && (
+            <Card className="p-8 text-center">
+              <CheckCircle2 size={32} className="mx-auto mb-2 text-[var(--color-success)]" />
+              <p className="text-sm font-semibold text-[var(--color-foreground)]">No cannibalization conflicts detected</p>
+              <p className="text-xs text-[var(--color-muted)] mt-1">Your pages are well-differentiated. Click &ldquo;Analyze Cannibalization&rdquo; above to run a scan.</p>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Add Keyword Modal */}

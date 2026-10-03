@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db";
 import type { DailyMetrics, Opportunity, PageMetrics, QueryMetrics, Totals } from "@/lib/types";
 import { classifyIntent } from "@/server/intelligence/intent";
-import { runOpportunityEngine } from "@/server/intelligence/opportunity-engine";
+import { runOpportunityEngine, isBrandQuery } from "@/server/intelligence/opportunity-engine";
 
 /**
  * Read models for the dashboard. Everything here reads from OUR Postgres,
@@ -469,6 +469,32 @@ export async function recomputeWebsiteOpportunities(
     learnedWeights[s.signal] = s.weight;
   }
 
+  const website = await prisma.website.findUnique({ where: { id: websiteId } });
+  const brandName = website?.name?.trim() || "brand";
+
+  const brandTerms: string[] = [];
+  if (brandName) {
+    brandTerms.push(brandName);
+    brandTerms.push(brandName.replace(/\s+/g, ""));
+    brandTerms.push(brandName.replace(/\b2\b/g, "to"));
+    brandTerms.push(brandName.replace(/\b2\b/g, "to").replace(/\s+/g, ""));
+    brandTerms.push(brandName.replace(/\b2\b/g, "two"));
+    brandTerms.push(brandName.replace(/\b2\b/g, "two").replace(/\s+/g, ""));
+  }
+  if (website?.url) {
+    try {
+      const u = new URL(website.url.startsWith("http") ? website.url : `https://${website.url}`);
+      const host = u.hostname.replace(/^www\./, "");
+      const domainName = host.split(".")[0];
+      if (domainName) {
+        brandTerms.push(domainName);
+        brandTerms.push(host);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const { opportunities: baseOpportunities, curve } = runOpportunityEngine({
     queries,
     pages,
@@ -476,10 +502,8 @@ export async function recomputeWebsiteOpportunities(
     previousQueries,
     previousPages,
     learnedWeights,
+    brandTerms,
   });
-
-  const website = await prisma.website.findUnique({ where: { id: websiteId } });
-  const brandName = website?.name?.trim() || "brand";
 
   const pageRecords = await prisma.pageRecord.findMany({ where: { websiteId } });
   const recByUrl = new Map(pageRecords.map((r) => [r.url.replace(/\/+$/, ""), r]));
@@ -492,15 +516,22 @@ export async function recomputeWebsiteOpportunities(
   const extraOpportunities = [...baseOpportunities];
   for (const p of pages) {
     const normUrl = p.page.replace(/\/+$/, "");
-    if (coveredUrls.has(normUrl) || p.page.includes("?")) continue;
+    if (
+      coveredUrls.has(normUrl) ||
+      p.page.includes("?") ||
+      p.page.includes("/my-account") ||
+      p.page.includes("/cart") ||
+      p.page.includes("/checkout")
+    ) {
+      continue;
+    }
     const rec = recByUrl.get(normUrl);
     const detail = (rec?.contentScoreDetail ?? {}) as { focusKeyword?: string | null };
-    const slugKw =
-      new URL(p.page).pathname
-        .replace(/\/+$/, "")
-        .split("/")
-        .pop()
-        ?.replace(/-/g, " ") || `${brandName} services`;
+    const pathnameSlug = new URL(p.page).pathname.replace(/\/+$/, "").split("/").pop()?.replace(/-/g, " ")?.trim();
+    if (!pathnameSlug && !detail.focusKeyword) {
+      continue;
+    }
+    const slugKw = pathnameSlug || "core offerings";
     const kw = (detail.focusKeyword || slugKw).toLowerCase();
 
     if (p.position <= 10.5 && p.impressions >= 8 && p.clicks === 0) {
@@ -617,14 +648,38 @@ export async function recomputeWebsiteOpportunities(
     }
   }
 
-  const sortedOpps = [...extraOpportunities].sort((a, b) => b.score - a.score);
-  const totalOpps = sortedOpps.length;
-  const opportunities = sortedOpps.map((o, i) => {
-    const rank = totalOpps <= 1 ? 1 : 1 - i / totalOpps;
+  const nonBrandOpps = extraOpportunities.filter((o) => !isBrandQuery(o.keyword ?? undefined, brandTerms));
+  const brandOpps = extraOpportunities.filter((o) => isBrandQuery(o.keyword ?? undefined, brandTerms));
+
+  nonBrandOpps.sort((a, b) => b.score - a.score);
+  brandOpps.sort((a, b) => b.score - a.score);
+
+  const totalNonBrand = nonBrandOpps.length;
+  const prioritizedNonBrand = nonBrandOpps.map((o, i) => {
+    const rank = totalNonBrand <= 1 ? 1 : 1 - i / totalNonBrand;
     const priority =
       rank >= 0.85 ? 1 : rank >= 0.65 ? 2 : rank >= 0.4 ? 3 : rank >= 0.15 ? 4 : 5;
-    return { ...o, priority };
+    return {
+      ...o,
+      priority,
+      evidence: {
+        ...(typeof o.evidence === "object" && o.evidence !== null ? o.evidence : {}),
+        isBrand: false,
+      },
+    };
   });
+
+  const prioritizedBrand = brandOpps.map((o) => ({
+    ...o,
+    priority: 5,
+    score: Number(Math.min(o.score, 50).toFixed(3)),
+    evidence: {
+      ...(typeof o.evidence === "object" && o.evidence !== null ? o.evidence : {}),
+      isBrand: true,
+    },
+  }));
+
+  const opportunities = [...prioritizedNonBrand, ...prioritizedBrand];
 
   // Persist Keyword rollups for the 28-day window.
   const prevByQuery = new Map((previousQueries ?? []).map((q) => [q.query, q]));

@@ -36,17 +36,17 @@ export default async function RedditAgentPage(props: {
           dataThrough={window.to.toISOString().slice(0, 10)}
         />
         <FeatureLockedGate
-          featureName="Autonomous Reddit Opportunity Agent"
-          featureDescription="Scan relevant subreddits for brand mentions, high-intent discussion threads, and organic citation opportunities with authentic AI response drafting."
-          requiredPlan="Pro ⭐"
-          price="$79/mo"
+          featureName="Reddit Distribution Agent"
+          featureDescription="Scan relevant subreddits with high-intent discussion monitoring, competitor mention tracking, and contextual value-first reply drafts to build organic brand authority."
+          requiredPlan={access.requiredPlan}
+          price={access.price}
           benefits={[
-            "Real-time subreddit keyword & intent monitoring",
-            "Context-aware value-first response drafting",
-            "Thread relevance scoring & sentiment analysis",
-            "One-click direct reply or copy-paste workflow",
+            "High-intent Reddit monitoring across target subreddits",
+            "Contextual AI reply drafts with brand positioning",
+            "Thread relevance scoring & organic citation tracking",
+            "One-click reply approval & karma protection guardrails",
           ]}
-          previewSnippet="Discovered 8 active threads in r/SEO and r/webdev discussing AI visibility. Generated 3 non-promotional, high-authority responses."
+          previewSnippet="Reddit Distribution Agent active: Discovered 8 active threads in r/SEO and r/marketing. Generated 3 non-promotional, high-authority responses."
         />
       </>
     );

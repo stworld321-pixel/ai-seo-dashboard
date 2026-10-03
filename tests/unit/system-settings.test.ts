@@ -19,6 +19,12 @@ describe("shouldKeepStoredSecret", () => {
     expect(shouldKeepStoredSecret("whatsapp_meta_token", "EAAnewtokenvalue123")).toBe(false);
   });
 
+  it("allows clearing secrets when explicit reset flags are passed", () => {
+    expect(shouldKeepStoredSecret("whatsapp_meta_token", "__RESET__")).toBe(false);
+    expect(shouldKeepStoredSecret("whatsapp_meta_token", "__CLEAR__")).toBe(false);
+    expect(shouldKeepStoredSecret("whatsapp_meta_token", "__clear__")).toBe(false);
+  });
+
   it("never short-circuits non-secret keys, so clearing them still works", () => {
     // whatsapp_provider is not a secret: an empty or any value must be written.
     expect(shouldKeepStoredSecret("whatsapp_provider", "")).toBe(false);
@@ -26,3 +32,4 @@ describe("shouldKeepStoredSecret", () => {
     expect(shouldKeepStoredSecret("whatsapp_meta_phone_id", "")).toBe(false);
   });
 });
+
