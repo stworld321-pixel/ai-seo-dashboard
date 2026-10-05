@@ -28,41 +28,50 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+function cleanCred(val?: string): string {
+  if (!val) return "";
+  return val.trim().replace(/^["']|["']$/g, "").trim();
+}
+
 export function resolveRedirectUri(request?: Request): string {
   if (request) {
-    const forwardedProto = request.headers.get("x-forwarded-proto");
-    const forwardedHost = request.headers.get("x-forwarded-host");
-    const host = forwardedHost || request.headers.get("host");
+    try {
+      const url = new URL(request.url);
+      const rawHost = request.headers.get("x-forwarded-host") || request.headers.get("host") || url.host;
+      const host = rawHost.split(",")[0].trim();
 
-    if (host) {
+      const rawProto = request.headers.get("x-forwarded-proto");
       const isLocal = host.startsWith("localhost") || host.startsWith("127.0.0.1");
-      const proto = forwardedProto || (isLocal ? "http" : "https");
+      const proto = rawProto ? rawProto.split(",")[0].trim() : (isLocal ? "http" : "https");
+
       return `${proto}://${host}/api/integrations/google/callback`;
+    } catch {
+      // fallback below
     }
   }
 
   const envUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
   if (envUrl) {
-    return `${envUrl.replace(/\/+$/, "")}/api/integrations/google/callback`;
+    return `${cleanCred(envUrl).replace(/\/+$/, "")}/api/integrations/google/callback`;
   }
 
   if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL.replace(/\/+$/, "")}/api/integrations/google/callback`;
+    return `https://${cleanCred(process.env.VERCEL_URL).replace(/\/+$/, "")}/api/integrations/google/callback`;
   }
 
   return "http://localhost:3000/api/integrations/google/callback";
 }
 
 export async function getGoogleClientCredentials(): Promise<{ clientId: string; clientSecret: string }> {
-  let clientId = process.env.GOOGLE_CLIENT_ID?.trim() || "";
-  let clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || "";
+  let clientId = cleanCred(process.env.GOOGLE_CLIENT_ID);
+  let clientSecret = cleanCred(process.env.GOOGLE_CLIENT_SECRET);
 
   // Check database SystemSetting if not in env
   if (!clientId || !clientSecret) {
     try {
       const { getSystemSettingValue } = await import("@/server/services/system-settings");
-      if (!clientId) clientId = (await getSystemSettingValue("google_client_id")).trim();
-      if (!clientSecret) clientSecret = (await getSystemSettingValue("google_client_secret")).trim();
+      if (!clientId) clientId = cleanCred(await getSystemSettingValue("google_client_id"));
+      if (!clientSecret) clientSecret = cleanCred(await getSystemSettingValue("google_client_secret"));
     } catch {
       // ignore
     }
