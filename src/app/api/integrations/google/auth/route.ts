@@ -2,13 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { getDefaultWebsite } from "@/server/services/dashboard";
-import { getGoogleOAuthUrl, getGoogleClientCredentials } from "@/server/integrations/google/oauth";
-
-function resolveRedirectUri(request: Request): string {
-  const host = request.headers.get("host") || "localhost:3000";
-  const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
-  return `${protocol}://${host}/api/integrations/google/callback`;
-}
+import {
+  getGoogleOAuthUrl,
+  getGoogleClientCredentials,
+  resolveRedirectUri,
+} from "@/server/integrations/google/oauth";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -20,7 +18,7 @@ export async function GET(request: Request) {
   }
 
   const redirectUri = resolveRedirectUri(request);
-  const { clientId, clientSecret } = getGoogleClientCredentials();
+  const { clientId, clientSecret } = await getGoogleClientCredentials();
 
   if (!clientId || !clientSecret) {
     return NextResponse.json({
@@ -31,7 +29,13 @@ export async function GET(request: Request) {
     });
   }
 
-  const oauthUrl = getGoogleOAuthUrl(website.id, redirectUri);
+  const oauthUrl = await getGoogleOAuthUrl(website.id, redirectUri, clientId);
+
+  // If redirect query param is present or user navigated directly
+  if (searchParams.get("redirect") === "true") {
+    return NextResponse.redirect(oauthUrl);
+  }
+
   return NextResponse.json({ url: oauthUrl, redirectUri });
 }
 
@@ -54,7 +58,18 @@ export async function POST(request: Request) {
   process.env.GOOGLE_CLIENT_ID = clientId;
   process.env.GOOGLE_CLIENT_SECRET = clientSecret;
 
-  // Persist to .env so it survives server restarts
+  // Persist to database so it works on Vercel and survives serverless restarts
+  try {
+    const { updateSystemSettings } = await import("@/server/services/system-settings");
+    await updateSystemSettings({
+      google_client_id: clientId,
+      google_client_secret: clientSecret,
+    });
+  } catch (err) {
+    console.warn("Failed to persist Google credentials to database:", err);
+  }
+
+  // Persist to .env so it survives local server restarts
   try {
     const envPath = path.resolve(process.cwd(), ".env");
     let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
@@ -72,7 +87,7 @@ export async function POST(request: Request) {
     }
     fs.writeFileSync(envPath, content, "utf8");
   } catch {
-    // Non-fatal if .env write fails
+    // Non-fatal if .env write fails on Vercel
   }
 
   const website = await getDefaultWebsite(body.websiteId);
@@ -81,6 +96,6 @@ export async function POST(request: Request) {
   }
 
   const redirectUri = resolveRedirectUri(request);
-  const oauthUrl = getGoogleOAuthUrl(website.id, redirectUri);
+  const oauthUrl = await getGoogleOAuthUrl(website.id, redirectUri, clientId);
   return NextResponse.json({ url: oauthUrl, redirectUri });
 }

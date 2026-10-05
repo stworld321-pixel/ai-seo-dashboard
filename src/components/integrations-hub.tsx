@@ -812,7 +812,7 @@ export function IntegrationsHub({
       (item.provider === "google_search_console" || item.provider === "google_analytics") &&
       !item.isConnected
     ) {
-      window.location.href = `/api/integrations/google/auth?websiteId=${websiteId}`;
+      window.location.href = `/api/integrations/google/auth?websiteId=${encodeURIComponent(websiteId)}&redirect=true`;
       return;
     }
 

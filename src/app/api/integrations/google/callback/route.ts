@@ -4,6 +4,7 @@ import {
   saveGoogleConnection,
   fetchGoogleSearchConsoleProperties,
   fetchGoogleAnalytics4Properties,
+  resolveRedirectUri,
 } from "@/server/integrations/google/oauth";
 import { syncDirectGoogleSearchConsole } from "@/server/integrations/google/gsc";
 import { syncDirectGoogleAnalytics4 } from "@/server/integrations/google/ga4";
@@ -40,9 +41,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/integrations/google?error=No+Website+Found", request.url));
   }
 
-  const host = request.headers.get("host") || "localhost:3000";
-  const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
-  const redirectUri = `${protocol}://${host}/api/integrations/google/callback`;
+  const redirectUri = resolveRedirectUri(request);
 
   try {
     const tokens = await exchangeGoogleAuthCode(code, redirectUri);

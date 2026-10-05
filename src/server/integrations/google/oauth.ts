@@ -28,10 +28,47 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
-export function getGoogleClientCredentials(): { clientId: string; clientSecret: string } {
+export function resolveRedirectUri(request?: Request): string {
+  if (request) {
+    const forwardedProto = request.headers.get("x-forwarded-proto");
+    const forwardedHost = request.headers.get("x-forwarded-host");
+    const host = forwardedHost || request.headers.get("host");
+
+    if (host) {
+      const isLocal = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+      const proto = forwardedProto || (isLocal ? "http" : "https");
+      return `${proto}://${host}/api/integrations/google/callback`;
+    }
+  }
+
+  const envUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+  if (envUrl) {
+    return `${envUrl.replace(/\/+$/, "")}/api/integrations/google/callback`;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/\/+$/, "")}/api/integrations/google/callback`;
+  }
+
+  return "http://localhost:3000/api/integrations/google/callback";
+}
+
+export async function getGoogleClientCredentials(): Promise<{ clientId: string; clientSecret: string }> {
   let clientId = process.env.GOOGLE_CLIENT_ID?.trim() || "";
   let clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || "";
 
+  // Check database SystemSetting if not in env
+  if (!clientId || !clientSecret) {
+    try {
+      const { getSystemSettingValue } = await import("@/server/services/system-settings");
+      if (!clientId) clientId = (await getSystemSettingValue("google_client_id")).trim();
+      if (!clientSecret) clientSecret = (await getSystemSettingValue("google_client_secret")).trim();
+    } catch {
+      // ignore
+    }
+  }
+
+  // Fallback to local .env file
   if (!clientId || !clientSecret) {
     try {
       const envPath = path.resolve(process.cwd(), ".env");
@@ -39,11 +76,11 @@ export function getGoogleClientCredentials(): { clientId: string; clientSecret: 
         const raw = fs.readFileSync(envPath, "utf8");
         const idMatch = raw.match(/^GOOGLE_CLIENT_ID=["']?([^"'\r\n]+)["']?/m);
         const secretMatch = raw.match(/^GOOGLE_CLIENT_SECRET=["']?([^"'\r\n]+)["']?/m);
-        if (idMatch?.[1]) {
+        if (!clientId && idMatch?.[1]) {
           clientId = idMatch[1].trim();
           process.env.GOOGLE_CLIENT_ID = clientId;
         }
-        if (secretMatch?.[1]) {
+        if (!clientSecret && secretMatch?.[1]) {
           clientSecret = secretMatch[1].trim();
           process.env.GOOGLE_CLIENT_SECRET = clientSecret;
         }
@@ -56,8 +93,8 @@ export function getGoogleClientCredentials(): { clientId: string; clientSecret: 
   return { clientId, clientSecret };
 }
 
-export function getGoogleOAuthUrl(websiteId: string, redirectUri: string): string {
-  const { clientId } = getGoogleClientCredentials();
+export async function getGoogleOAuthUrl(websiteId: string, redirectUri: string, explicitClientId?: string): Promise<string> {
+  const clientId = explicitClientId || (await getGoogleClientCredentials()).clientId;
   const state = Buffer.from(JSON.stringify({ websiteId, timestamp: Date.now() })).toString("base64url");
 
   const params = new URLSearchParams({
@@ -85,10 +122,10 @@ export async function exchangeGoogleAuthCode(
   code: string,
   redirectUri: string,
 ): Promise<TokenExchangeResult> {
-  const { clientId, clientSecret } = getGoogleClientCredentials();
+  const { clientId, clientSecret } = await getGoogleClientCredentials();
 
   if (!clientId || !clientSecret) {
-    throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not configured in .env");
+    throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not configured. Please add them in Vercel environment variables or Admin Settings.");
   }
 
   const res = await fetch(GOOGLE_TOKEN_ENDPOINT, {
@@ -230,7 +267,7 @@ export async function getValidGoogleAccessToken(websiteId?: string): Promise<str
         tag: connection.tokenTag,
       });
 
-      const { clientId, clientSecret } = getGoogleClientCredentials();
+      const { clientId, clientSecret } = await getGoogleClientCredentials();
 
       const res = await fetch(GOOGLE_TOKEN_ENDPOINT, {
         method: "POST",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,6 +12,8 @@ import {
   KeyRound,
   AlertCircle,
   ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 
 export function GoogleConnectCard({
@@ -30,10 +32,25 @@ export function GoogleConnectCard({
   const [redirectUri, setRedirectUri] = useState(
     "http://localhost:3000/api/integrations/google/callback",
   );
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRedirectUri(`${window.location.origin}/api/integrations/google/callback`);
+    }
+  }, []);
+
+  function copyToClipboard(text: string, field: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    }
+  }
 
   async function handleStartGoogleSignIn() {
     setConnecting(true);
@@ -264,23 +281,63 @@ export function GoogleConnectCard({
             </div>
 
             {authMode === "oauth" ? (
-              <form onSubmit={handleSaveOAuthAndRedirect} className="space-y-3">
-                <p className="text-[11px] text-[var(--color-muted)] leading-relaxed">
-                  To open Google&apos;s official Gmail chooser screen, enter your Google Cloud OAuth
-                  2.0 Web Client credentials (from{" "}
-                  <a
-                    href="https://console.cloud.google.com/apis/credentials"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-[var(--color-primary)] underline"
-                  >
-                    Google Cloud Console <ExternalLink size={10} />
-                  </a>
-                  ) with Authorized Redirect URI:{" "}
-                  <code className="rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 font-mono text-[10px]">
-                    {redirectUri}
-                  </code>
-                </p>
+              <form onSubmit={handleSaveOAuthAndRedirect} className="space-y-4">
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-[var(--color-foreground)] space-y-2">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400">
+                    Google Cloud Console Configuration Guide:
+                  </p>
+                  <p className="text-[var(--color-muted)] leading-relaxed">
+                    To avoid <strong>Error 400: redirect_uri_mismatch (&ldquo;Access blocked: This app&apos;s request is invalid&rdquo;)</strong>, add these exact URLs to your OAuth 2.0 Web Client in{" "}
+                    <a
+                      href="https://console.cloud.google.com/apis/credentials"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[var(--color-primary)] font-medium underline"
+                    >
+                      Google Cloud Console <ExternalLink size={10} />
+                    </a>:
+                  </p>
+
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between gap-2 rounded bg-[var(--color-surface)] p-2 border border-[var(--color-border)]">
+                      <div className="overflow-hidden">
+                        <span className="block text-[10px] text-[var(--color-muted)] uppercase tracking-wider font-semibold">Authorized JavaScript origin</span>
+                        <code className="block font-mono text-[11px] truncate text-[var(--color-foreground)]">
+                          {typeof window !== "undefined" ? window.location.origin : "https://ai-seo-dashboard-gold.vercel.app"}
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(typeof window !== "undefined" ? window.location.origin : "https://ai-seo-dashboard-gold.vercel.app", "origin")}
+                        className="inline-flex shrink-0 items-center gap-1 rounded bg-[var(--color-surface-muted)] px-2 py-1 text-[10px] font-medium hover:bg-[var(--color-surface-hover)] transition-colors"
+                      >
+                        {copiedField === "origin" ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                        {copiedField === "origin" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 rounded bg-[var(--color-surface)] p-2 border border-[var(--color-border)]">
+                      <div className="overflow-hidden">
+                        <span className="block text-[10px] text-[var(--color-muted)] uppercase tracking-wider font-semibold">Authorized redirect URI</span>
+                        <code className="block font-mono text-[11px] truncate text-[var(--color-foreground)]">
+                          {redirectUri}
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(redirectUri, "redirectUri")}
+                        className="inline-flex shrink-0 items-center gap-1 rounded bg-[var(--color-surface-muted)] px-2 py-1 text-[10px] font-medium hover:bg-[var(--color-surface-hover)] transition-colors"
+                      >
+                        {copiedField === "redirectUri" ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                        {copiedField === "redirectUri" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-[var(--color-muted)]">
+                    <strong>Tip:</strong> If your OAuth Consent Screen is in <em>Testing</em> mode, also add your Gmail to <strong>OAuth consent screen &gt; Test users</strong>.
+                  </p>
+                </div>
 
                 <div>
                   <label className="block font-medium text-[var(--color-foreground)]">
