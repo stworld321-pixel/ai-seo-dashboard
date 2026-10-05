@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/ensure-db.mjs && next dev",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && node scripts/deploy-migrations.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
